@@ -6,6 +6,9 @@ import { StatusBar } from 'expo-status-bar';
 import MainTabNavigator from './MainTabNavigator';
 import AuthNavigator    from './AuthNavigator';
 import ChatDetailScreen from '../screens/ChatDetailScreen';
+import ProfileScreen    from '../screens/ProfileScreen';
+import RequestsScreen   from '../screens/RequestsScreen';
+import RestaurantDetailScreen from '../screens/RestaurantDetailScreen';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -33,6 +36,9 @@ export default function AppNavigator() {
                 component={ChatDetailScreen}
                 options={{ presentation: 'card' }}
               />
+              <Stack.Screen name="Profile"    component={ProfileScreen} />
+              <Stack.Screen name="Requests"   component={RequestsScreen} />
+              <Stack.Screen name="RestaurantDetail" component={RestaurantDetailScreen} />
             </>
           ) : (
             <Stack.Screen

@@ -4,11 +4,11 @@ import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, Platfor
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import DiscoverScreen  from '../screens/DiscoverScreen';
-import MatchesScreen   from '../screens/MatchesScreen';
-import RequestsScreen  from '../screens/RequestsScreen';
-import ChatScreen      from '../screens/ChatScreen';
-import ProfileScreen   from '../screens/ProfileScreen';
+import DiscoverScreen    from '../screens/DiscoverScreen';
+import MatchesScreen     from '../screens/MatchesScreen';
+import DatePlannerScreen from '../screens/DatePlannerScreen';
+import VibesScreen       from '../screens/VibesScreen';
+import ChatScreen        from '../screens/ChatScreen';
 import { useTheme } from '../theme/ThemeContext';
 
 const { width } = Dimensions.get('window');
@@ -27,9 +27,9 @@ const Tab = createBottomTabNavigator();
 const ICONS = {
   Discover: { on: 'compass',       off: 'compass-outline'       },
   Matches:  { on: 'heart',         off: 'heart-outline'         },
-  Requests: { on: 'notifications', off: 'notifications-outline' },
+  Date:     { on: 'calendar',      off: 'calendar-outline'      },
+  Vibes:    { on: 'sparkles',      off: 'sparkles-outline'      },
   Chat:     { on: 'chatbubble',    off: 'chatbubble-outline'    },
-  Profile:  { on: 'person',        off: 'person-outline'        },
 };
 
 function CustomTabBar({ state, descriptors, navigation }) {
@@ -109,12 +109,6 @@ function CustomTabBar({ state, descriptors, navigation }) {
                 size={18}
                 color={iconColor}
               />
-              {/* Badge for Requests */}
-              {route.name === 'Requests' && (
-                <View style={[styles.badge, isFocused && styles.badgeActive]}>
-                  <Text style={styles.badgeText}>5</Text>
-                </View>
-              )}
             </View>
             <Text style={[styles.tabLabel, { color: labelColor }]}>
               {route.name}
@@ -134,11 +128,11 @@ export default function MainTabNavigator() {
         headerShown: false,
       }}
     >
-      <Tab.Screen name="Discover"  component={DiscoverScreen}  />
-      <Tab.Screen name="Matches"   component={MatchesScreen}   />
-      <Tab.Screen name="Requests"  component={RequestsScreen}  />
-      <Tab.Screen name="Chat"      component={ChatScreen}      />
-      <Tab.Screen name="Profile"   component={ProfileScreen}   />
+      <Tab.Screen name="Discover"  component={DiscoverScreen}    />
+      <Tab.Screen name="Matches"   component={MatchesScreen}     />
+      <Tab.Screen name="Date"      component={DatePlannerScreen} />
+      <Tab.Screen name="Vibes"     component={VibesScreen}       />
+      <Tab.Screen name="Chat"      component={ChatScreen}        />
     </Tab.Navigator>
   );
 }
@@ -180,12 +174,13 @@ const getStyles = (theme) => StyleSheet.create({
     paddingBottom: Platform.OS === 'ios' ? 8 : 6,
   },
   iconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
+    overflow: 'hidden',
   },
   iconContainerActive: {
     backgroundColor: theme.isDark ? '#fff' : '#0D0F1A',

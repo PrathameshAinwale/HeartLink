@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  Image, SafeAreaView, StatusBar, Dimensions, TextInput,
+  Image, SafeAreaView, StatusBar, Dimensions, TextInput, ScrollView, Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,32 +10,45 @@ import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import ProfileDetail from '../components/discovery/ProfileDetail';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 const MATCHES = [
-  { id:'1', name:'Sophia Carter',   age:23, image:'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=500', matchedAt:'Today',    compatibility:92, online:true  },
-  { id:'2', name:'Mia Rodriguez',   age:25, image:'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500', matchedAt:'Yesterday', compatibility:85, online:true  },
-  { id:'3', name:'Zoe Martin',      age:21, image:'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=500', matchedAt:'2d ago',    compatibility:82, online:false },
-  { id:'4', name:'Lily Chen',       age:24, image:'https://images.unsplash.com/photo-1530268729831-4b0b9e170218?w=500', matchedAt:'3d ago',    compatibility:91, online:false },
+  { id: '1', name: 'Sophia Carter', age: 23, image: 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=500', matchedAt: 'Today', compatibility: 95, online: true },
+  { id: '2', name: 'Mia Rodriguez', age: 25, image: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500', matchedAt: 'Yesterday', compatibility: 88, online: true },
+  { id: '3', name: 'Zoe Martin', age: 21, image: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=500', matchedAt: '2d ago', compatibility: 82, online: false },
+  { id: '4', name: 'Lily Chen', age: 24, image: 'https://images.unsplash.com/photo-1530268729831-4b0b9e170218?w=500', matchedAt: '3d ago', compatibility: 91, online: true },
+  { id: '5', name: 'Aria Sterling', age: 22, image: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500', matchedAt: '4d ago', compatibility: 96, online: true },
+  { id: '6', name: 'Elena Petrova', age: 26, image: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=500', matchedAt: '5d ago', compatibility: 89, online: false }
 ];
 
 export default function MatchesScreen() {
   const navigation = useNavigation();
   const [searchOpen, setSearchOpen] = useState(false);
-  const [search, setSearch]         = useState('');
-  const [matches, setMatches]       = useState(MATCHES);
-  
+  const [search, setSearch] = useState('');
+  const [matches, setMatches] = useState(MATCHES);
+
   const { theme, isDark } = useTheme();
   const styles = useMemo(() => getStyles(theme), [theme]);
 
-  const [detailVisible, setDetailVisible]     = useState(false);
+  const [detailVisible, setDetailVisible] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState(null);
 
-  const filtered = matches.filter(m => m.name.toLowerCase().includes(search.toLowerCase()));
-  const CARD_W = (width - 52) / 2;
+  const filtered = matches.filter(m => 
+    m.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const CARD_W = (width - 44) / 2;
 
   const openProfile = (profile) => {
-    setSelectedProfile(profile);
+    // Map properties to match DiscoverScreen schema
+    const formatted = {
+      ...profile,
+      images: [profile.image],
+      job: 'Connections',
+      distance: profile.matchedAt,
+      bio: 'You matched! Open chat to start sharing cosmic vibes. ✨'
+    };
+    setSelectedProfile(formatted);
     setDetailVisible(true);
   };
 
@@ -47,53 +60,72 @@ export default function MatchesScreen() {
     navigation.navigate('ChatDetail', { userId: id });
   };
 
-  const renderCard = ({ item }) => (
-    <TouchableOpacity
-      style={[styles.card, { width: CARD_W }]}
-      onPress={() => openProfile(item)}
-      activeOpacity={0.85}
-    >
-      <Image source={{ uri: item.image }} style={styles.cardImage} />
-      <LinearGradient colors={theme.gradientCard} style={styles.cardOverlay} />
+  const renderCard = ({ item, index }) => {
+    // Unique asymmetrical corner radius alternating
+    const isEven = index % 2 === 0;
+    const cardBorderRadiusStyles = isEven
+      ? {
+        borderTopLeftRadius: 36,
+        borderBottomRightRadius: 36,
+        borderTopRightRadius: 10,
+        borderBottomLeftRadius: 10,
+      }
+      : {
+        borderTopRightRadius: 36,
+        borderBottomLeftRadius: 36,
+        borderTopLeftRadius: 10,
+        borderBottomRightRadius: 10,
+      };
 
-      {/* Online dot */}
-      {item.online && <View style={styles.onlineDot} />}
+    return (
+      <TouchableOpacity
+        style={[styles.card, { width: CARD_W }, cardBorderRadiusStyles]}
+        onPress={() => openProfile(item)}
+        activeOpacity={0.85}
+      >
+        <Image source={{ uri: item.image }} style={styles.cardImage} />
+        <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.75)']} style={styles.cardOverlay} />
 
-      {/* Compat badge */}
-      <View style={styles.compatBadge}>
-        <Ionicons name="heart" size={9} color={theme.accent} />
-        <Text style={styles.compatText}>{item.compatibility}%</Text>
-      </View>
-
-      {/* Info */}
-      <View style={styles.cardInfo}>
-        <View style={styles.infoRow}>
-          <View style={styles.infoLeft}>
-            <Text style={styles.cardName}>{item.name.split(' ')[0]}</Text>
-            <Text style={styles.cardSub}>{item.age} · {item.matchedAt}</Text>
-          </View>
-          
-          {/* Message button - just a round icon */}
-          <TouchableOpacity
-            style={styles.msgBtnRound}
-            onPress={() => startChat(item.id)}
-            activeOpacity={0.7}
-          >
-            <LinearGradient colors={theme.gradientAccent} style={styles.msgBtnGrad}>
-              <Ionicons name="chatbubble" size={14} color="#fff" />
-            </LinearGradient>
-          </TouchableOpacity>
+        {/* Dynamic compat neon pill */}
+        <View style={styles.compatBadge}>
+          <Ionicons name="heart" size={9} color="#fff" />
+          <Text style={styles.compatText}>{item.compatibility}%</Text>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+
+        {/* Info */}
+        <View style={styles.cardInfo}>
+          <View style={styles.infoRow}>
+            <View style={styles.infoLeft}>
+              <Text style={styles.cardName}>{item.name.split(' ')[0]}</Text>
+              <Text style={styles.cardSub}>{item.age} · {item.matchedAt}</Text>
+            </View>
+
+            {/* Quick message icon button */}
+            <TouchableOpacity
+              style={styles.msgBtnRound}
+              onPress={() => startChat(item.id)}
+              activeOpacity={0.7}
+            >
+              <LinearGradient colors={theme.gradientAccent} style={styles.msgBtnGrad}>
+                <Ionicons name="chatbubble" size={14} color="#fff" />
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
-    <LinearGradient colors={theme.bgGrad} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.flex}>
+    <LinearGradient colors={theme.bgGrad} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.root}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-      <SafeAreaView style={styles.flex}>
 
-        {/* Header */}
+      {/* Glowing background depth blobs */}
+      <View style={styles.glowBlobFuchsia} pointerEvents="none" />
+      <View style={styles.glowBlobCyan} pointerEvents="none" />
+
+      <SafeAreaView style={styles.flex}>
+        {/* Header navigation bar */}
         <View style={styles.header}>
           <View>
             <Text style={styles.title}>Matches</Text>
@@ -104,7 +136,7 @@ export default function MatchesScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Search */}
+        {/* Glass search input */}
         {searchOpen && (
           <View style={styles.searchWrap}>
             <View style={styles.searchBar}>
@@ -130,7 +162,7 @@ export default function MatchesScreen() {
         />
       </SafeAreaView>
 
-      {/* Profile Modal */}
+      {/* Match details slide-up */}
       <ProfileDetail
         visible={detailVisible}
         profile={selectedProfile}
@@ -148,18 +180,48 @@ export default function MatchesScreen() {
 
 const getStyles = (theme) => StyleSheet.create({
   flex: { flex: 1 },
+  root: { flex: 1, position: 'relative' },
+
+  // Glassmorphic depth blobs
+  glowBlobFuchsia: {
+    position: 'absolute',
+    top: height * 0.1,
+    right: -60,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(255, 0, 127, 0.20)',
+    opacity: 0.8,
+    zIndex: 0,
+  },
+  glowBlobCyan: {
+    position: 'absolute',
+    bottom: height * 0.2,
+    left: -80,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: 'rgba(0, 191, 255, 0.16)',
+    opacity: 0.7,
+    zIndex: 0,
+  },
+
   header: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16,
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 14 : 14,
+    paddingBottom: 12,
+    zIndex: 10,
   },
   title: { fontSize: 28, fontWeight: '900', color: theme.textPrimary, letterSpacing: -0.6 },
-  sub:   { fontSize: 13, color: theme.textSec, marginTop: 3 },
+  sub: { fontSize: 13, color: theme.textSec, marginTop: 3 },
   iconBtn: {
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: theme.glass, borderWidth: 1, borderColor: theme.border,
     justifyContent: 'center', alignItems: 'center',
   },
-  searchWrap: { paddingHorizontal: 20, marginBottom: 10 },
+
+  searchWrap: { paddingHorizontal: 20, marginBottom: 12, zIndex: 10 },
   searchBar: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: theme.glass, borderRadius: 20,
@@ -167,36 +229,159 @@ const getStyles = (theme) => StyleSheet.create({
     borderWidth: 1, borderColor: theme.border,
   },
   searchInput: { flex: 1, color: theme.textPrimary, fontSize: 14, padding: 0 },
-  list:       { paddingHorizontal: 16, paddingBottom: 110 },
+
+  list: { paddingHorizontal: 16, paddingBottom: 110 },
   colWrapper: { gap: 12, marginBottom: 12 },
 
-  card: {
-    height: 280, borderRadius: 22, overflow: 'hidden',
-    backgroundColor: theme.glass,
-    borderWidth: 1, borderColor: theme.border,
+  // Cosmic Sparks Featured Carousel
+  sparksSection: {
+    marginBottom: 22,
+    paddingLeft: 4,
   },
-  cardImage:   { position: 'absolute', width: '100%', height: '100%', resizeMode: 'cover' },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: theme.textPrimary,
+    marginBottom: 12,
+    letterSpacing: -0.2,
+  },
+  sparksList: {
+    gap: 14,
+    paddingRight: 20,
+  },
+  sparkItem: {
+    alignItems: 'center',
+    position: 'relative',
+    width: 70,
+  },
+  sparkRing: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    padding: 2.2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sparkPhotoInner: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 31,
+    overflow: 'hidden',
+    backgroundColor: '#000',
+  },
+  sparkPhoto: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  sparkCompatBadge: {
+    position: 'absolute',
+    bottom: 20,
+    right: 0,
+    backgroundColor: '#FF375F',
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    paddingVertical: 1.5,
+    borderWidth: 1.2,
+    borderColor: theme.isDark ? '#000' : '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  sparkCompatText: {
+    color: '#fff',
+    fontSize: 8,
+    fontWeight: '900',
+  },
+  sparkName: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: theme.textSec,
+    marginTop: 6,
+    textAlign: 'center',
+  },
+
+  // Interactive Filter Tabs
+  filterContainer: {
+    gap: 8,
+    marginBottom: 18,
+    paddingLeft: 4,
+  },
+  filterPill: {
+    borderRadius: 18,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.glass,
+    height: 36,
+  },
+  filterPillActive: {
+    borderColor: 'transparent',
+  },
+  filterPillGrad: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    height: '100%',
+    justifyContent: 'center',
+  },
+  filterPillInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    height: '100%',
+    justifyContent: 'center',
+  },
+  filterPillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: theme.textSec,
+  },
+  filterPillTextActive: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#fff',
+  },
+
+  // Grid Card Items
+  card: {
+    height: 280,
+    overflow: 'hidden',
+    backgroundColor: theme.glass,
+    borderWidth: 1,
+    borderColor: theme.border,
+    position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+  },
+  cardImage: { position: 'absolute', width: '100%', height: '100%', resizeMode: 'cover' },
   cardOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, height: '60%' },
   onlineDot: {
-    position: 'absolute', top: 10, left: 10,
-    width: 12, height: 12, borderRadius: 6,
-    backgroundColor: theme.accentGreen, borderWidth: 2, borderColor: theme.bg,
+    position: 'absolute', top: 12, left: 12,
+    width: 11, height: 11, borderRadius: 5.5,
+    backgroundColor: '#30D158', borderWidth: 2, borderColor: '#140E2D',
+    zIndex: 5,
   },
   compatBadge: {
-    position: 'absolute', top: 10, right: 10,
+    position: 'absolute', top: 12, right: 12,
     flexDirection: 'row', alignItems: 'center', gap: 3,
-    backgroundColor: theme.glassDark, borderRadius: 12,
+    backgroundColor: 'rgba(255, 55, 95, 0.22)',
+    borderRadius: 12,
     paddingHorizontal: 8, paddingVertical: 4,
-    borderWidth: 1, borderColor: theme.borderAccent,
+    borderWidth: 1, borderColor: '#FF375F',
+    zIndex: 5,
   },
   compatText: { color: '#fff', fontSize: 11, fontWeight: '800' },
-  cardInfo:   { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 12 },
-  infoRow:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  infoLeft:   { flex: 1, marginRight: 6 },
-  cardName:   { fontSize: 16, fontWeight: '900', color: '#fff' },
-  cardSub:    { fontSize: 12, color: 'rgba(255,255,255,0.65)' },
-  
-  msgBtnRound: { width: 34, height: 34, borderRadius: 17, overflow: 'hidden' },
-  msgBtnGrad:  { flex: 1, justifyContent: 'center', alignItems: 'center' },
-});
+  cardInfo: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 12 },
+  infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  infoLeft: { flex: 1, marginRight: 6 },
+  cardName: { fontSize: 16, fontWeight: '900', color: '#fff', letterSpacing: -0.2 },
+  cardSub: { fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
 
+  msgBtnRound: { width: 34, height: 34, borderRadius: 17, overflow: 'hidden' },
+  msgBtnGrad: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+});

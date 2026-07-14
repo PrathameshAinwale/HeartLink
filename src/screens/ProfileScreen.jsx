@@ -1,188 +1,252 @@
-// src/screens/ProfileScreen.jsx
+// src/screens/ProfileScreen.jsx — High-fidelity Glassmorphic Profile & Settings
 import React, { useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  Image, StatusBar, ScrollView, Dimensions, FlatList,
+  Image, StatusBar, ScrollView, Dimensions, FlatList, Platform, Alert
 } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../theme/ThemeContext';
 
 const { width, height } = Dimensions.get('window');
 
-const GALLERY = [
-  'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=400',
-  'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400',
-  'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=400',
-  'https://images.unsplash.com/photo-1508739773434-c26b3d09e071?w=400',
+const GALLERY_DEFAULT = [
+  'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=500',
+  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500',
+  'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500',
+  'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=500',
 ];
 
 export default function ProfileScreen() {
-  const { user } = useAuth();
+  const navigation = useNavigation();
+  const { user, logout } = useAuth();
   const { isDark, theme, toggleTheme } = useTheme();
   const styles = useMemo(() => getStyles(theme), [theme]);
   const [photoIdx, setPhotoIdx] = useState(0);
-  const allPhotos = [user.coverImage, ...GALLERY];
+
+  // Safe fallback to prevent null crashes
+  const profileUser = useMemo(() => {
+    return user || {
+      name: 'Alex Rivera',
+      username: '@alex_rivera',
+      age: 26,
+      bio: 'Designer focused on creating beautiful, user-centered digital experiences.',
+      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400',
+      coverImage: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=800',
+      followers: 412,
+      following: 278,
+      likes: 1043,
+      interests: ['Design', 'Photography', 'Travel', 'Coffee', 'Music'],
+    };
+  }, [user]);
+
+  const allPhotos = useMemo(() => {
+    return [profileUser.coverImage, ...GALLERY_DEFAULT];
+  }, [profileUser]);
+
+  const handleBack = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate('MainTabs', { screen: 'Discover' });
+    }
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      "Logout",
+      "Are you sure you want to log out of HeartLink?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Logout", 
+          style: "destructive", 
+          onPress: () => {
+            logout();
+            // Fallback navigate to Register if stack resets
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'Register' }],
+            });
+          } 
+        }
+      ]
+    );
+  };
+
+  const handleEdit = () => {
+    Alert.alert("Edit Profile ✍️", "Profile editing will be unlocked in the next HeartLink update.");
+  };
 
   return (
     <LinearGradient colors={theme.bgGrad} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.flex}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-      <ScrollView 
-        showsVerticalScrollIndicator={false} 
+
+      {/* Floating background decorative blobs */}
+      <View style={styles.glowBlobPurple} pointerEvents="none" />
+      <View style={styles.glowBlobCyan} pointerEvents="none" />
+
+      {/* Main Scroll Content */}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
         bounces={false}
-        nestedScrollEnabled={true}
-        scrollEventThrottle={16}
-        decelerationRate="normal"
-        contentContainerStyle={{ paddingBottom: 110 }}
+        contentContainerStyle={styles.scrollContainer}
       >
+        {/* Cover Photo Area */}
+        <View style={styles.coverWrapper}>
+          <Image source={{ uri: allPhotos[photoIdx] }} style={styles.coverImg} />
+          <LinearGradient colors={['rgba(0,0,0,0.4)', 'transparent']} style={styles.coverTopGrad} />
+          <LinearGradient colors={['transparent', theme.isDark ? '#0D0F1A' : '#F6F5FA']} style={styles.coverBottomGrad} />
 
-        {/* ── Hero ─────────────────────────────────────────────────── */}
-        <View style={styles.heroWrap}>
-          <Image source={{ uri: allPhotos[photoIdx] }} style={styles.heroImg} />
-          <LinearGradient colors={theme.gradientTop} style={styles.heroTopGrad} />
-          <LinearGradient colors={theme.gradientCard} style={styles.heroBottomGrad} />
-
-          {/* Photo indicators */}
-          <View style={styles.photoDots}>
-            {allPhotos.map((_, i) => (
-              <TouchableOpacity key={i} onPress={() => setPhotoIdx(i)}
-                style={[styles.dot, i === photoIdx && styles.dotActive]}
-              />
-            ))}
-          </View>
-
-          {/* Top actions */}
-          <View style={styles.heroTop}>
-            <View style={styles.heroTopInner}>
+          {/* Symmetrical Top Action Bar */}
+          <View style={styles.headerBar}>
+            <TouchableOpacity style={styles.glassBtn} onPress={handleBack} activeOpacity={0.7}>
+              <Ionicons name="chevron-back" size={20} color="#fff" />
+            </TouchableOpacity>
+            
+            <View style={styles.headerRightActions}>
               <TouchableOpacity style={styles.glassBtn} onPress={toggleTheme} activeOpacity={0.7}>
                 <Ionicons name={isDark ? "sunny-outline" : "moon-outline"} size={18} color="#fff" />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.glassBtn}>
-                <Ionicons name="settings-outline" size={18} color="#fff" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.glassBtn}>
-                <Ionicons name="share-outline" size={18} color="#fff" />
+              <TouchableOpacity style={styles.glassBtn} onPress={handleLogout} activeOpacity={0.7}>
+                <Ionicons name="log-out-outline" size={18} color="#fff" />
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* Hero info — glass panel bottom of image */}
-          <View style={styles.heroInfoPanel}>
-            <View style={styles.heroInfoRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.heroName}>{user.name}, {user.age || 24}</Text>
-                <Text style={styles.heroSub}>{user.username}</Text>
-              </View>
-              <TouchableOpacity style={styles.editBtn}>
-                <LinearGradient colors={theme.gradientAccent} style={styles.editBtnGrad}>
-                  <Ionicons name="create-outline" size={14} color="#fff" />
-                  <Text style={styles.editBtnText}>Edit</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
+          {/* Photo Pagination Bar */}
+          <View style={styles.photoIndicatorRow}>
+            {allPhotos.map((_, i) => (
+              <TouchableOpacity
+                key={i}
+                onPress={() => setPhotoIdx(i)}
+                style={[styles.indicatorBar, i === photoIdx && styles.indicatorBarActive]}
+              />
+            ))}
           </View>
         </View>
 
-        {/* ── Content ──────────────────────────────────────────────── */}
-        <View style={styles.content}>
-
-          {/* Stats glass card */}
-          <View style={styles.statsCard}>
-            {[
-              { val: user.followers, label: 'Followers' },
-              { val: user.following, label: 'Following' },
-              { val: user.likes,     label: 'Likes'     },
-            ].map((s, i, arr) => (
-              <React.Fragment key={s.label}>
-                <View style={styles.statItem}>
-                  <Text style={styles.statNum}>{s.val}</Text>
-                  <Text style={styles.statLabel}>{s.label}</Text>
-                </View>
-                {i < arr.length - 1 && <View style={styles.statDiv} />}
-              </React.Fragment>
-            ))}
-          </View>
-
-          {/* Quick actions */}
-          <View style={styles.actionRow}>
-            <TouchableOpacity style={styles.actionIconBtn}>
-              <LinearGradient colors={theme.gradientAccent} style={styles.actionIconGrad}>
-                <Ionicons name="heart" size={20} color="#fff" />
+        {/* User Card Area (Overlaps the Cover Bottom) */}
+        <View style={styles.profileBody}>
+          <View style={styles.avatarRow}>
+            {/* Overlapping Profile Avatar */}
+            <View style={styles.avatarRing}>
+              <Image source={{ uri: profileUser.avatar }} style={styles.avatarImg} />
+            </View>
+            
+            <TouchableOpacity style={styles.editBtn} onPress={handleEdit} activeOpacity={0.85}>
+              <LinearGradient colors={theme.gradientAccent} start={{ x:0, y:0 }} end={{ x:1, y:0 }} style={styles.editBtnGrad}>
+                <Ionicons name="create" size={14} color="#fff" />
+                <Text style={styles.editBtnText}>Edit Profile</Text>
               </LinearGradient>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionIconBtn}>
-              <View style={styles.glassIconBtnInner}>
-                <Ionicons name="mail-outline" size={20} color={theme.isDark ? "#fff" : theme.textPrimary} />
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.actionIconBtn}>
-              <View style={styles.glassIconBtnInner}>
-                <Ionicons name="bookmark-outline" size={20} color={theme.isDark ? "#fff" : theme.textPrimary} />
-              </View>
-            </TouchableOpacity>
           </View>
 
-          {/* Bio glass card */}
-          <View style={styles.glassSection}>
-            <Text style={styles.sectionLabel}>ABOUT</Text>
-            <Text style={styles.bioText}>{user.bio}</Text>
+          {/* Name & Details Card */}
+          <View style={styles.infoBox}>
+            <BlurView intensity={isDark ? 45 : 75} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
+            <Text style={styles.profileName}>{profileUser.name}, {profileUser.age || 26}</Text>
+            <Text style={styles.profileUsername}>{profileUser.username}</Text>
           </View>
 
-          {/* Interests */}
-          <View style={styles.glassSection}>
-            <Text style={styles.sectionLabel}>INTERESTS</Text>
-            <View style={styles.tagsRow}>
-              {(user.interests || []).map((t, i) => (
-                <View key={i} style={styles.tag}>
-                  <Text style={styles.tagText}>{t}</Text>
+          {/* Stats Glass Card */}
+          <View style={styles.statsCard}>
+            <BlurView intensity={isDark ? 40 : 70} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
+            <View style={styles.statCol}>
+              <Text style={styles.statNum}>{profileUser.followers}</Text>
+              <Text style={styles.statLabel}>Followers</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statCol}>
+              <Text style={styles.statNum}>{profileUser.following}</Text>
+              <Text style={styles.statLabel}>Following</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statCol}>
+              <Text style={styles.statNum}>{profileUser.likes}</Text>
+              <Text style={styles.statLabel}>Likes</Text>
+            </View>
+          </View>
+
+          {/* About Section */}
+          <View style={styles.sectionBox}>
+            <BlurView intensity={isDark ? 40 : 70} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
+            <Text style={styles.sectionLabel}>About Me</Text>
+            <Text style={styles.bioText}>{profileUser.bio}</Text>
+          </View>
+
+          {/* Interests Section */}
+          <View style={styles.sectionBox}>
+            <BlurView intensity={isDark ? 40 : 70} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
+            <Text style={styles.sectionLabel}>Interests</Text>
+            <View style={styles.interestsRow}>
+              {(profileUser.interests || []).map((tag, idx) => (
+                <View key={idx} style={styles.interestTag}>
+                  <Text style={styles.interestTagText}>{tag}</Text>
                 </View>
               ))}
             </View>
           </View>
 
-          {/* Gallery */}
-          <View>
-            <View style={styles.sectionRow}>
-              <Text style={styles.sectionTitle}>Gallery</Text>
-              <TouchableOpacity style={styles.addBtn}>
-                <Ionicons name="add" size={16} color={theme.textSec} />
-                <Text style={styles.addBtnText}>Add photo</Text>
+          {/* Gallery Section */}
+          <View style={styles.galleryContainer}>
+            <View style={styles.galleryHeader}>
+              <Text style={styles.galleryTitle}>Photo Gallery</Text>
+              <TouchableOpacity style={styles.addPhotoBtn} activeOpacity={0.7}>
+                <Ionicons name="add" size={14} color={theme.textPrimary} />
+                <Text style={styles.addPhotoText}>Add Photo</Text>
               </TouchableOpacity>
             </View>
+
             <FlatList
               data={allPhotos}
               keyExtractor={(_, i) => i.toString()}
-              horizontal showsHorizontalScrollIndicator={false}
+              horizontal
+              showsHorizontalScrollIndicator={false}
               nestedScrollEnabled={true}
               contentContainerStyle={styles.galleryList}
-              renderItem={({ item, index }) => (
-                <TouchableOpacity
-                  style={[styles.galleryThumb, index === photoIdx && styles.galleryThumbActive]}
-                  onPress={() => setPhotoIdx(index)}
-                >
-                  <Image source={{ uri: item }} style={styles.galleryImg} />
-                  {index === photoIdx && (
-                    <LinearGradient
-                      colors={['rgba(255,55,95,0.40)', 'transparent']}
-                      style={StyleSheet.absoluteFill}
-                    />
-                  )}
-                </TouchableOpacity>
-              )}
+              renderItem={({ item, index }) => {
+                // Alternating asymmetrical corners matching premium styling
+                const isEven = index % 2 === 0;
+                const corners = isEven
+                  ? { borderTopLeftRadius: 18, borderBottomRightRadius: 18 }
+                  : { borderTopRightRadius: 18, borderBottomLeftRadius: 18 };
+
+                return (
+                  <TouchableOpacity
+                    style={[styles.galleryThumb, corners, index === photoIdx && styles.galleryThumbActive]}
+                    onPress={() => setPhotoIdx(index)}
+                    activeOpacity={0.9}
+                  >
+                    <Image source={{ uri: item }} style={styles.galleryThumbImg} />
+                    {index === photoIdx && (
+                      <LinearGradient
+                        colors={['rgba(255, 55, 95, 0.3)', 'transparent']}
+                        style={StyleSheet.absoluteFill}
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              }}
             />
           </View>
 
-          {/* Profile strength */}
-          <View style={[styles.glassSection, { marginTop: 22 }]}>
-            <Text style={styles.sectionLabel}>PROFILE STRENGTH</Text>
-            <View style={styles.strengthBar}>
-              <LinearGradient colors={theme.gradientAccent} style={[styles.strengthFill, { width: '72%' }]} />
+          {/* Profile Strength Rating */}
+          <View style={styles.sectionBox}>
+            <BlurView intensity={isDark ? 40 : 70} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
+            <Text style={styles.sectionLabel}>Profile Strength</Text>
+            <View style={styles.progressTrack}>
+              <LinearGradient
+                colors={theme.gradientAccent}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                style={[styles.progressFill, { width: '75%' }]}
+              />
             </View>
-            <Text style={styles.strengthText}>72% — Add location & more photos to attract more matches</Text>
+            <Text style={styles.progressSubtext}>75% — Complete verification to stand out to nearby matches</Text>
           </View>
-
-          <View style={{ height: 40 }} />
         </View>
       </ScrollView>
     </LinearGradient>
@@ -191,100 +255,328 @@ export default function ProfileScreen() {
 
 const getStyles = (theme) => StyleSheet.create({
   flex: { flex: 1 },
+  scrollContainer: {
+    paddingBottom: 110,
+  },
 
-  // Hero
-  heroWrap:      { height: height * 0.50, position: 'relative' },
-  heroImg:       { position: 'absolute', width: '100%', height: '100%', resizeMode: 'cover' },
-  heroTopGrad:   { position: 'absolute', top: 0, left: 0, right: 0, height: 130 },
-  heroBottomGrad:{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '50%' },
-  photoDots: {
-    position: 'absolute', top: 14, left: 0, right: 0,
-    flexDirection: 'row', justifyContent: 'center', gap: 5,
+  // Glowing background elements
+  glowBlobPurple: {
+    position: 'absolute',
+    top: height * 0.35,
+    right: -85,
+    width: 250,
+    height: 250,
+    borderRadius: 125,
+    backgroundColor: 'rgba(168, 85, 247, 0.14)',
+    opacity: 0.8,
+    zIndex: 0,
   },
-  dot: {
-    width: 6, height: 3.5, borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.35)',
+  glowBlobCyan: {
+    position: 'absolute',
+    bottom: height * 0.1,
+    left: -85,
+    width: 230,
+    height: 230,
+    borderRadius: 115,
+    backgroundColor: 'rgba(6, 182, 212, 0.12)',
+    opacity: 0.7,
+    zIndex: 0,
   },
-  dotActive: { width: 20, backgroundColor: '#fff' },
-  heroTop:   { position: 'absolute', top: 0, left: 0, right: 0 },
-  heroTopInner: {
-    flexDirection: 'row', justifyContent: 'flex-end', gap: 8,
-    paddingHorizontal: 16, paddingTop: 52,
+
+  // Cover Image banner
+  coverWrapper: {
+    height: 260,
+    position: 'relative',
+    width: '100%',
+  },
+  coverImg: {
+    position: 'absolute',
+    left: 0, right: 0, top: 0, bottom: 0,
+    width: '100%', height: '100%',
+    resizeMode: 'cover',
+  },
+  coverTopGrad: {
+    position: 'absolute',
+    left: 0, right: 0, top: 0,
+    height: 100,
+  },
+  coverBottomGrad: {
+    position: 'absolute',
+    left: 0, right: 0, bottom: 0,
+    height: 120,
+  },
+
+  // Header Nav Bar overlay
+  headerBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 12 : 12,
+    zIndex: 35,
+  },
+  headerRightActions: {
+    flexDirection: 'row',
+    gap: 10,
   },
   glassBtn: {
-    width: 38, height: 38, borderRadius: 19,
-    backgroundColor: 'rgba(0,0,0,0.40)', // keep dark glass button on hero image for contrast
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)',
-    justifyContent: 'center', alignItems: 'center',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  heroInfoPanel: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    paddingHorizontal: 20, paddingBottom: 20, paddingTop: 16,
-    backgroundColor: theme.isDark ? 'rgba(13,15,26,0.50)' : 'rgba(255,255,255,0.65)',
-    borderTopWidth: 1, borderTopColor: theme.border,
-  },
-  heroInfoRow: { flexDirection: 'row', alignItems: 'flex-end' },
-  heroName:   { fontSize: 28, fontWeight: '900', color: theme.isDark ? '#fff' : theme.textPrimary, letterSpacing: -0.7 },
-  heroSub:    { fontSize: 14, color: theme.textSec, marginTop: 3 },
-  editBtn:    { borderRadius: 18, overflow: 'hidden' },
-  editBtnGrad:{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 8 },
-  editBtnText:{ color: '#fff', fontWeight: '700', fontSize: 13 },
 
-  // Content
-  content: { paddingHorizontal: 16, paddingTop: 18 },
+  // Photo Dots
+  photoIndicatorRow: {
+    position: 'absolute',
+    bottom: 24,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+    zIndex: 10,
+  },
+  indicatorBar: {
+    width: 14,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+  },
+  indicatorBarActive: {
+    width: 28,
+    backgroundColor: '#fff',
+  },
+
+  // Profile Body (overlaps cover)
+  profileBody: {
+    paddingHorizontal: 20,
+    marginTop: -45, // pulls avatar/card up overlapping cover image
+    zIndex: 20,
+  },
+  avatarRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  avatarRing: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    borderWidth: 3.5,
+    borderColor: theme.isDark ? '#0D0F1A' : '#F6F5FA',
+    backgroundColor: theme.glass,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  avatarImg: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  editBtn: {
+    borderRadius: 18,
+    overflow: 'hidden',
+    marginBottom: 4,
+    shadowColor: '#FF375F',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+  },
+  editBtnGrad: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+  },
+  editBtnText: {
+    color: '#fff',
+    fontSize: 12.5,
+    fontWeight: '800',
+  },
+
+  // Info details container
+  infoBox: {
+    borderRadius: 24,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.glass,
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
+  profileName: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: theme.textPrimary,
+    letterSpacing: -0.5,
+  },
+  profileUsername: {
+    fontSize: 13,
+    color: theme.textSec,
+    marginTop: 3,
+    fontWeight: '500',
+  },
+
+  // Stats Card layout
   statsCard: {
-    flexDirection: 'row', justifyContent: 'space-around',
-    backgroundColor: theme.glass, borderRadius: 22, padding: 18,
-    borderWidth: 1, borderColor: theme.border, marginBottom: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    backgroundColor: theme.glass,
+    borderRadius: 24,
+    paddingVertical: 18,
+    borderWidth: 1,
+    borderColor: theme.border,
+    marginBottom: 14,
+    overflow: 'hidden',
   },
-  statItem:  { alignItems: 'center' },
-  statNum:   { fontSize: 24, fontWeight: '900', color: theme.textPrimary, letterSpacing: -0.5 },
-  statLabel: { fontSize: 12, color: theme.textSec, marginTop: 3 },
-  statDiv:   { width: 1, backgroundColor: theme.border, marginVertical: 4 },
+  statCol: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  statNum: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: theme.textPrimary,
+    letterSpacing: -0.5,
+  },
+  statLabel: {
+    fontSize: 11.5,
+    color: theme.textSec,
+    marginTop: 4,
+    fontWeight: '600',
+  },
+  statDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: theme.border,
+  },
 
-  actionRow: { flexDirection: 'row', gap: 10, marginBottom: 18 },
-  actionIconBtn: { width: 48, height: 48, borderRadius: 24, overflow: 'hidden' },
-  actionIconGrad: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  glassIconBtnInner: {
-    flex: 1, justifyContent: 'center', alignItems: 'center',
-    backgroundColor: theme.glass, borderRadius: 24,
-    borderWidth: 1, borderColor: theme.border,
+  // Common Section card
+  sectionBox: {
+    backgroundColor: theme.glass,
+    borderRadius: 24,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: theme.border,
+    marginBottom: 14,
+    overflow: 'hidden',
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: theme.textFaint,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    marginBottom: 10,
+  },
+  bioText: {
+    fontSize: 14.5,
+    color: theme.textSec,
+    lineHeight: 22,
   },
 
-  glassSection: {
-    backgroundColor: theme.glass, borderRadius: 20, padding: 16,
-    borderWidth: 1, borderColor: theme.border, marginBottom: 14,
+  // Interests Tags
+  interestsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
-  sectionLabel: { fontSize: 11, fontWeight: '800', color: theme.textFaint, letterSpacing: 1.2, marginBottom: 10 },
-  bioText:      { fontSize: 15, color: theme.textSec, lineHeight: 23 },
-  tagsRow:      { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  tag: {
-    backgroundColor: theme.glassMid, borderRadius: 20,
-    paddingHorizontal: 14, paddingVertical: 7,
-    borderWidth: 1, borderColor: theme.border,
+  interestTag: {
+    backgroundColor: theme.glassMid,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: theme.border,
   },
-  tagText: { color: theme.textPrimary, fontSize: 13, fontWeight: '600' },
+  interestTagText: {
+    color: theme.textPrimary,
+    fontSize: 12.5,
+    fontWeight: '600',
+  },
 
-  sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  sectionTitle: { fontSize: 17, fontWeight: '800', color: theme.textPrimary },
-  addBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: theme.glass, borderRadius: 14,
-    paddingHorizontal: 12, paddingVertical: 5,
-    borderWidth: 1, borderColor: theme.border,
+  // Gallery
+  galleryContainer: {
+    marginBottom: 16,
   },
-  addBtnText: { color: theme.textSec, fontSize: 12, fontWeight: '600' },
-
-  galleryList: { gap: 10, paddingRight: 4 },
+  galleryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    marginBottom: 12,
+  },
+  galleryTitle: {
+    fontSize: 17,
+    fontWeight: '900',
+    color: theme.textPrimary,
+    letterSpacing: -0.2,
+  },
+  addPhotoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: theme.glass,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  addPhotoText: {
+    color: theme.textSec,
+    fontSize: 11.5,
+    fontWeight: '700',
+  },
+  galleryList: {
+    gap: 12,
+  },
   galleryThumb: {
-    width: 90, height: 110, borderRadius: 16, overflow: 'hidden',
-    borderWidth: 2, borderColor: 'transparent',
+    width: 90,
+    height: 115,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
-  galleryThumbActive: { borderColor: theme.accent },
-  galleryImg: { width: '100%', height: '100%', resizeMode: 'cover' },
+  galleryThumbActive: {
+    borderColor: '#FF375F',
+  },
+  galleryThumbImg: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
 
-  strengthBar: { height: 6, backgroundColor: theme.glass, borderRadius: 3, overflow: 'hidden', marginBottom: 8 },
-  strengthFill: { height: '100%', borderRadius: 3 },
-  strengthText: { fontSize: 13, color: theme.textSec, lineHeight: 19 },
+  // Progress Bar
+  progressTrack: {
+    height: 6,
+    backgroundColor: theme.glassMid,
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  progressSubtext: {
+    fontSize: 12.5,
+    color: theme.textSec,
+    lineHeight: 18,
+  },
 });
-

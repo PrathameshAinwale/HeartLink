@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   Animated, PanResponder, Dimensions, Image,
-  SafeAreaView, ScrollView, FlatList, StatusBar, Platform,
+  SafeAreaView, ScrollView, FlatList, StatusBar, Platform, Easing,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -45,7 +45,7 @@ const PROFILES = [
   },
   {
     id: 3,
-    name: 'Johny Sins', age: 26, job: 'Fitness Coach',
+    name: 'Johnson markey', age: 26, job: 'Fitness Coach',
     bio: 'Always focus on the grind. Hard work pays off.',
     location: 'Miami', distance: '12 km away', compatibility: 91,
     images: [
@@ -115,9 +115,18 @@ export default function DiscoverScreen() {
   const filteredProfiles = PROFILES;
   const cur = filteredProfiles[idx];
 
-  // Reset photo progress when the profile (idx) changes
+  const detailsOpacity = useRef(new Animated.Value(1)).current;
+
+  // Reset photo progress & fade in details on index change
   useEffect(() => {
     setPhotoIdx(0);
+    detailsOpacity.setValue(0);
+    Animated.timing(detailsOpacity, {
+      toValue: 1,
+      duration: 380,
+      easing: Easing.bezier(0.25, 1, 0.4, 1),
+      useNativeDriver: false,
+    }).start();
   }, [idx]);
 
   const showDetailRef = useRef(false);
@@ -134,6 +143,15 @@ export default function DiscoverScreen() {
   }, [navigation]);
 
   useEffect(() => {
+    // Prefetch all profile images to prevent image load flashes
+    PROFILES.forEach(p => {
+      if (p.images) {
+        p.images.forEach(img => {
+          Image.prefetch(img).catch(() => { });
+        });
+      }
+    });
+
     // Shimmer loops
     Animated.loop(Animated.sequence([
       Animated.timing(shimAnim, { toValue: 1, duration: 1000, useNativeDriver: false }),
@@ -213,7 +231,9 @@ export default function DiscoverScreen() {
   const swipe = (dir) => {
     Animated.timing(pan, {
       toValue: { x: dir === 'right' ? width * 1.6 : -width * 1.6, y: 0 },
-      duration: 340, useNativeDriver: false,
+      duration: 450,
+      easing: Easing.bezier(0.25, 1, 0.4, 1),
+      useNativeDriver: false,
     }).start(() => {
       pan.setValue({ x: 0, y: 0 });
       setIdx(p => (p + 1) % PROFILES.length);
@@ -221,19 +241,56 @@ export default function DiscoverScreen() {
     });
   };
 
+  // Real-time background cards transitions matching swipe drag distance
+  const nextCardScale = pan.x.interpolate({
+    inputRange: [-width * 0.6, 0, width * 0.6],
+    outputRange: [1, 0.97, 1],
+    extrapolate: 'clamp'
+  });
+  const nextCardTranslateY = pan.x.interpolate({
+    inputRange: [-width * 0.6, 0, width * 0.6],
+    outputRange: [0, -8, 0],
+    extrapolate: 'clamp'
+  });
+  const nextCardOpacity = pan.x.interpolate({
+    inputRange: [-width * 0.6, 0, width * 0.6],
+    outputRange: [1, 0.8, 1],
+    extrapolate: 'clamp'
+  });
+
+  const backCardScale = pan.x.interpolate({
+    inputRange: [-width * 0.6, 0, width * 0.6],
+    outputRange: [0.97, 0.93, 0.97],
+    extrapolate: 'clamp'
+  });
+  const backCardTranslateY = pan.x.interpolate({
+    inputRange: [-width * 0.6, 0, width * 0.6],
+    outputRange: [-8, -16, -8],
+    extrapolate: 'clamp'
+  });
+  const backCardOpacity = pan.x.interpolate({
+    inputRange: [-width * 0.6, 0, width * 0.6],
+    outputRange: [0.8, 0.5, 0.8],
+    extrapolate: 'clamp'
+  });
+
   return (
     <LinearGradient colors={theme.bgGrad} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={styles.root}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
       <SafeAreaView style={styles.headerWrap} edges={['top']}>
         <View style={styles.headerPill}>
-          <Image
-            source={{ uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80' }}
-            style={styles.headerUserAvatar}
-          />
+          <TouchableOpacity style={styles.headerLeftBtn} onPress={() => navigation.navigate('Profile')} activeOpacity={0.7}>
+            <Ionicons name="person" size={17} color={theme.textPrimary} />
+          </TouchableOpacity>
+          
           <Text style={styles.headerCenterTitle}>Heart Link</Text>
-          <TouchableOpacity style={styles.headerNotificationBtn} activeOpacity={0.7}>
-            <Ionicons name="notifications" size={20} color={theme.textPrimary} />
+          
+          <TouchableOpacity style={styles.headerRightBtn} onPress={() => navigation.navigate('Requests')} activeOpacity={0.7}>
+            <Ionicons name="notifications" size={19} color={theme.textPrimary} />
+            <View style={styles.headerBadge}>
+              <Text style={styles.headerBadgeText}>5</Text>
+            </View>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -270,60 +327,62 @@ export default function DiscoverScreen() {
             cardHeightRef.current = e.nativeEvent.layout.height;
           }}
         >
-          {/* Card 2 (back-most, styled empty glass layer) */}
+          {/* Card 2 (back-most, renders profile after next) */}
           {PROFILES.length > 2 && (
-            <View style={[styles.card, styles.cardBack2]}>
-              <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.03)', borderWidth: 1.5, borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.06)', borderRadius: 36 }]} />
-              <LinearGradient colors={theme.gradientCard} style={styles.bottomGrad} />
-            </View>
+            <Animated.View style={[
+              styles.card,
+              styles.cardBack2,
+              {
+                opacity: backCardOpacity,
+                transform: [
+                  { translateY: backCardTranslateY },
+                  { scale: backCardScale }
+                ]
+              }
+            ]}>
+              <Image source={{ uri: PROFILES[(idx + 2) % PROFILES.length].images[0] }} style={styles.cardPhoto} />
+              <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.75)']} style={styles.bottomGrad} />
+            </Animated.View>
           )}
 
-          {/* Card 1 (middle, styled empty glass layer) */}
+          {/* Card 1 (middle, renders next profile) */}
           {PROFILES.length > 1 && (
-            <View style={[styles.card, styles.cardBack1]}>
-              <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)', borderWidth: 1.5, borderColor: isDark ? 'rgba(255, 255, 255, 0.18)' : 'rgba(0, 0, 0, 0.08)', borderRadius: 36 }]} />
-              <LinearGradient colors={theme.gradientCard} style={styles.bottomGrad} />
-            </View>
+            <Animated.View style={[
+              styles.card,
+              styles.cardBack1,
+              {
+                opacity: nextCardOpacity,
+                transform: [
+                  { translateY: nextCardTranslateY },
+                  { scale: nextCardScale }
+                ]
+              }
+            ]}>
+              <Image source={{ uri: PROFILES[(idx + 1) % PROFILES.length].images[0] }} style={styles.cardPhoto} />
+              <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.75)']} style={styles.bottomGrad} />
+            </Animated.View>
           )}
 
-          {/* Card 0 (front active card, details visible) */}
           <Animated.View
             {...panResponder.panHandlers}
             style={[styles.card, styles.cardActive, { transform: [{ translateX: pan.x }, { rotate }] }]}
           >
-            {/* Active Photo */}
-            <Image source={{ uri: cur.images[photoIdx] }} style={styles.cardPhoto} />
-
-            {/* Overlapping progress indicators row at the top of the photo */}
-            <View style={styles.indicatorContainer}>
-              {cur.images.map((_, i) => (
-                <View
-                  key={i}
-                  style={[
-                    styles.indicatorDot,
-                    i === photoIdx && styles.indicatorDotActive
-                  ]}
-                />
-              ))}
-            </View>
+            {/* Active Photo - Always 100% solid opacity with idx key to prevent old photo flash */}
+            <Image key={idx} source={{ uri: cur.images[photoIdx] }} style={styles.cardPhoto} />
 
             {/* Gradient shadows */}
             <LinearGradient colors={['rgba(0,0,0,0.15)', 'transparent']} style={styles.topGrad} />
             <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.75)']} style={styles.bottomGrad} />
 
-            {/* LIKE / NOPE stamps on swipe */}
-            <Animated.View style={[styles.stamp, styles.stampLike, { opacity: likeAnim }]}>
-              <Text style={styles.stampText}>LIKE ❤️</Text>
-            </Animated.View>
-            <Animated.View style={[styles.stamp, styles.stampNope, { opacity: nopeAnim }]}>
-              <Text style={styles.stampText}>NOPE 💔</Text>
-            </Animated.View>
+            {/* Overlapping progress indicators and details overlay (faded in dynamically) */}
+            <Animated.View style={{ opacity: detailsOpacity, flex: 1, width: '100%', height: '100%', position: 'absolute' }}>
 
-            {/* Profile details directly floating on bottom-left of card (no capsule) */}
-            <TouchableOpacity activeOpacity={0.9} onPress={openDetail} style={styles.cardTextOverlayBottomLeft}>
-              <Text style={styles.cardProfileName}>{cur.name}, {cur.age}</Text>
-              <Text style={styles.cardProfileJob}>{cur.job}</Text>
-            </TouchableOpacity>
+              {/* Profile details directly floating on bottom-left of card (no capsule) */}
+              <TouchableOpacity activeOpacity={0.9} onPress={openDetail} style={styles.cardTextOverlayBottomLeft}>
+                <Text style={styles.cardProfileName}>{cur.name}, {cur.age}</Text>
+                <Text style={styles.cardProfileJob}>{cur.job}</Text>
+              </TouchableOpacity>
+            </Animated.View>
           </Animated.View>
         </View>
 
@@ -370,7 +429,7 @@ export default function DiscoverScreen() {
       {showDetail && (
         <Animated.View style={[styles.detailSheet, { transform: [{ translateY: sheetY }] }]}>
           <LinearGradient
-            colors={isDark ? ['rgba(10,10,15,0.97)', 'rgba(14,14,20,0.99)'] : ['rgba(240,236,252,0.97)', 'rgba(250,250,253,0.99)']}
+            colors={isDark ? ['#140E2D', '#0A051C'] : ['#F2EBFF', '#FFFFFF']}
             style={StyleSheet.absoluteFill}
           />
 
@@ -516,9 +575,7 @@ const getStyles = (theme) => StyleSheet.create({
 
   // ── Separated Header Bar (Profile User, Center Name, Right bell) ──────────
   headerWrap: {
-    backgroundColor: theme.isDark ? 'rgba(11, 7, 33, 0.85)' : 'rgba(255, 255, 255, 0.88)',
-    borderBottomWidth: 1.2,
-    borderBottomColor: theme.isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
+    backgroundColor: 'transparent',
     paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 0,
   },
   headerPill: {
@@ -528,12 +585,45 @@ const getStyles = (theme) => StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 24,
   },
-  headerUserAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.4)',
+  headerLeftBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: theme.isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.05)',
+    borderWidth: 1.2,
+    borderColor: theme.isDark ? 'rgba(255, 255, 255, 0.28)' : 'rgba(0, 0, 0, 0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerRightBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: theme.isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.05)',
+    borderWidth: 1.2,
+    borderColor: theme.isDark ? 'rgba(255, 255, 255, 0.28)' : 'rgba(0, 0, 0, 0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  headerBadge: {
+    position: 'absolute',
+    top: -3,
+    right: -3,
+    backgroundColor: '#FF375F',
+    borderRadius: 8,
+    minWidth: 15,
+    height: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 2,
+    borderWidth: 1.5,
+    borderColor: theme.isDark ? '#0D0214' : '#fff',
+  },
+  headerBadgeText: {
+    color: '#fff',
+    fontSize: 8.5,
+    fontWeight: '900',
   },
   headerCenterTitle: {
     fontFamily: Platform.OS === 'ios' ? 'Helvetica Neue' : 'sans-serif-medium',
@@ -544,20 +634,6 @@ const getStyles = (theme) => StyleSheet.create({
     textShadowColor: theme.isDark ? 'rgba(0, 0, 0, 0.35)' : 'rgba(255, 255, 255, 0.4)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
-  },
-  headerNotificationBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: theme.isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.05)',
-    borderWidth: 1.2,
-    borderColor: theme.isDark ? 'rgba(255, 255, 255, 0.28)' : 'rgba(0, 0, 0, 0.12)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: theme.isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.04)',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
   },
 
   // Glowing background blobs for glassmorphic depth
@@ -871,10 +947,15 @@ const getStyles = (theme) => StyleSheet.create({
   sheetCompatLbl: { fontSize: 11, color: theme.textSec, fontWeight: '600' },
 
   sheetCard: {
-    backgroundColor: theme.glass,
+    backgroundColor: theme.isDark ? '#1C1236' : '#FFFFFF',
     borderRadius: 20, padding: 16,
     borderWidth: 1, borderColor: theme.border,
     marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: theme.isDark ? 0.2 : 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   sheetCardLabel: {
     fontSize: 10, fontWeight: '800', color: theme.textFaint,
@@ -883,7 +964,7 @@ const getStyles = (theme) => StyleSheet.create({
   sheetBio: { fontSize: 15, color: theme.textSec, lineHeight: 23 },
   tagsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   tag: {
-    backgroundColor: theme.glass,
+    backgroundColor: theme.isDark ? '#2B1E4D' : '#F2EBFF',
     borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7,
     borderWidth: 1, borderColor: theme.border,
   },
