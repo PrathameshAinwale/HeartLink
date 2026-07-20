@@ -1,35 +1,96 @@
-import React, { createContext, useContext, useState } from 'react';
+// src/hooks/useAuth.js — Persistent Authentication Session Hook
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { setAuthToken } from '../services/api';
 
 const AuthContext = createContext(null);
+const USER_STORAGE_KEY = '@heartlink_user_session';
+const TOKEN_STORAGE_KEY = '@heartlink_token_session';
 
 export function AuthProvider({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const login = (userData) => {
-    setUser(userData || {
-      id: '1',
+  // Restore saved authentication session on app startup
+  useEffect(() => {
+    const restoreSession = async () => {
+      try {
+        const savedToken = await AsyncStorage.getItem(TOKEN_STORAGE_KEY);
+        const savedUser = await AsyncStorage.getItem(USER_STORAGE_KEY);
+
+        if (savedUser) {
+          const parsedUser = JSON.parse(savedUser);
+          if (savedToken) {
+            setAuthToken(savedToken);
+          }
+          setUser(parsedUser);
+          setIsAuthenticated(true);
+        }
+      } catch (e) {
+        console.warn('[Session Storage] Failed to restore user session:', e);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    restoreSession();
+  }, []);
+
+  const login = async (userData, token = null) => {
+    const activeUser = userData || {
+      id: 1,
       name: 'Alex Rivera',
-      username: '@alex_rivera',
       age: 26,
-      bio: 'Designer focused on creating impactful, user-centered digital experiences.',
+      bio: 'Living life, chasing dreams, and making meaningful connections.',
       avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400',
-      coverImage: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=800',
-      followers: 412,
-      following: 278,
-      likes: 1043,
       interests: ['Design', 'Photography', 'Travel', 'Coffee', 'Music'],
-    });
+    };
+
+    try {
+      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(activeUser));
+      if (token) {
+        await AsyncStorage.setItem(TOKEN_STORAGE_KEY, token);
+        setAuthToken(token);
+      }
+    } catch (e) {
+      console.warn('[Session Storage] Failed to store login session:', e);
+    }
+
+    setUser(activeUser);
     setIsAuthenticated(true);
   };
 
-  const logout = () => {
+  const updateUser = async (updatedData) => {
+    const nextUser = {
+      ...(user || {}),
+      ...updatedData,
+    };
+
+    setUser(nextUser);
+
+    try {
+      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(nextUser));
+    } catch (e) {
+      console.warn('[Session Storage] Failed to update stored user session:', e);
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await AsyncStorage.removeItem(USER_STORAGE_KEY);
+      await AsyncStorage.removeItem(TOKEN_STORAGE_KEY);
+    } catch (e) {
+      console.warn('[Session Storage] Failed to clear stored session:', e);
+    }
+
+    setAuthToken(null);
     setUser(null);
     setIsAuthenticated(false);
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, user, login, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, user, login, logout, updateUser, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

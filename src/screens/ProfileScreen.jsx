@@ -1,8 +1,8 @@
-// src/screens/ProfileScreen.jsx — High-fidelity Glassmorphic Profile & Settings
-import React, { useState, useMemo } from 'react';
+// src/screens/ProfileScreen.jsx — User Profile View & Interactive Settings
+import React, { useState, useMemo, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity,
-  Image, StatusBar, ScrollView, Dimensions, FlatList, Platform, Alert
+  View, Text, StyleSheet, TouchableOpacity, TextInput,
+  Image, StatusBar, ScrollView, Dimensions, FlatList, Platform, Modal,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -10,42 +10,150 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../theme/ThemeContext';
+import { updateUserProfile } from '../services/userService';
+import { ensureArray } from '../utils/helpers';
+
+import CustomAlertModal from '../components/CustomAlertModal';
 
 const { width, height } = Dimensions.get('window');
 
-const GALLERY_DEFAULT = [
-  'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=500',
-  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500',
-  'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500',
-  'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=500',
+const FALLBACK_PHOTOS = [
+  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800',
+  'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=800',
+  'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=800',
+];
+
+const RELATIONSHIP_OPTIONS = [
+  'Long-term relationship',
+  'Casual dating',
+  'Marriage',
+  'Friendship',
 ];
 
 export default function ProfileScreen() {
   const navigation = useNavigation();
-  const { user, logout } = useAuth();
+  const { user, logout, updateUser } = useAuth();
   const { isDark, theme, toggleTheme } = useTheme();
   const styles = useMemo(() => getStyles(theme), [theme]);
   const [photoIdx, setPhotoIdx] = useState(0);
 
-  // Safe fallback to prevent null crashes
+  // Extract all photos uploaded by the user during registration
+  const allPhotos = useMemo(() => {
+    if (!user) return FALLBACK_PHOTOS;
+
+    let photos = [];
+    const uPhotos = ensureArray(user.photos);
+    const uImages = ensureArray(user.images);
+
+    if (uPhotos.length > 0) {
+      photos = uPhotos.map(p => (typeof p === 'string' ? p : p.photo_url || p.uri)).filter(Boolean);
+    } else if (uImages.length > 0) {
+      photos = uImages.filter(Boolean);
+    }
+
+    if (user.avatar && !photos.includes(user.avatar)) {
+      photos.unshift(user.avatar);
+    }
+
+    if (user.coverImage && !photos.includes(user.coverImage)) {
+      photos.unshift(user.coverImage);
+    }
+
+    return photos.length > 0 ? photos : FALLBACK_PHOTOS;
+  }, [user]);
+
+  // Registered user data
   const profileUser = useMemo(() => {
-    return user || {
-      name: 'Alex Rivera',
-      username: '@alex_rivera',
-      age: 26,
-      bio: 'Designer focused on creating beautiful, user-centered digital experiences.',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400',
-      coverImage: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=800',
-      followers: 412,
-      following: 278,
-      likes: 1043,
-      interests: ['Design', 'Photography', 'Travel', 'Coffee', 'Music'],
+    const u = user || {};
+    const cityState = u.city ? `${u.city}${u.state ? ', ' + u.state : ''}` : (u.location || 'Chicago, IL');
+    
+    return {
+      name: u.name || 'Alex Rivera',
+      age: u.age || 26,
+      job: u.job || 'Member',
+      city: u.city || 'Chicago',
+      state: u.state || 'IL',
+      location: cityState,
+      bio: u.bio || 'Living life, chasing dreams, and making meaningful connections.',
+      relationshipType: u.relationship_type || u.relationshipType || 'Long-term relationship',
+      interests: ensureArray(u.interests || u.hobbies, ['Design', 'Photography', 'Travel', 'Coffee', 'Music']),
     };
   }, [user]);
 
-  const allPhotos = useMemo(() => {
-    return [profileUser.coverImage, ...GALLERY_DEFAULT];
-  }, [profileUser]);
+  // State for Edit Modal
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editJob, setEditJob] = useState('');
+  const [editCity, setEditCity] = useState('');
+  const [editState, setEditState] = useState('');
+  const [editBio, setEditBio] = useState('');
+  const [editRelType, setEditRelType] = useState('');
+  const [editTagInput, setEditTagInput] = useState('');
+  const [editInterests, setEditInterests] = useState([]);
+  const [saving, setSaving] = useState(false);
+
+  // Popups & Alerts
+  const [logoutAlertVisible, setLogoutAlertVisible] = useState(false);
+  const [successAlertVisible, setSuccessAlertVisible] = useState(false);
+  const [errorAlertVisible, setErrorAlertVisible] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const handleOpenEdit = () => {
+    setEditName(profileUser.name);
+    setEditJob(profileUser.job);
+    setEditCity(profileUser.city);
+    setEditState(profileUser.state);
+    setEditBio(profileUser.bio);
+    setEditRelType(profileUser.relationshipType);
+    setEditInterests([...ensureArray(profileUser.interests)]);
+    setIsEditing(true);
+  };
+
+  const handleAddInterest = () => {
+    const trimmed = editTagInput.trim();
+    const current = ensureArray(editInterests);
+    if (trimmed && !current.includes(trimmed)) {
+      setEditInterests([...current, trimmed]);
+      setEditTagInput('');
+    }
+  };
+
+  const handleRemoveInterest = (tag) => {
+    setEditInterests(ensureArray(editInterests).filter(t => t !== tag));
+  };
+
+  const handleSaveProfile = async () => {
+    if (!editName.trim()) {
+      setErrorMsg('Full name cannot be empty.');
+      setErrorAlertVisible(true);
+      return;
+    }
+
+    setSaving(true);
+    const updatedPayload = {
+      name: editName.trim(),
+      job: editJob.trim(),
+      city: editCity.trim(),
+      state: editState.trim(),
+      bio: editBio.trim(),
+      relationship_type: editRelType,
+      interests: editInterests,
+    };
+
+    try {
+      const res = await updateUserProfile(user?.id, updatedPayload);
+      setSaving(false);
+      setIsEditing(false);
+      updateUser(res.user || updatedPayload);
+      setSuccessAlertVisible(true);
+    } catch (err) {
+      setSaving(false);
+      // Even if offline, update state locally
+      updateUser(updatedPayload);
+      setIsEditing(false);
+      setSuccessAlertVisible(true);
+    }
+  };
 
   const handleBack = () => {
     if (navigation.canGoBack()) {
@@ -56,36 +164,19 @@ export default function ProfileScreen() {
   };
 
   const handleLogout = () => {
-    Alert.alert(
-      "Logout",
-      "Are you sure you want to log out of HeartLink?",
-      [
-        { text: "Cancel", style: "cancel" },
-        { 
-          text: "Logout", 
-          style: "destructive", 
-          onPress: () => {
-            logout();
-            // Fallback navigate to Register if stack resets
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'Register' }],
-            });
-          } 
-        }
-      ]
-    );
+    setLogoutAlertVisible(true);
   };
 
-  const handleEdit = () => {
-    Alert.alert("Edit Profile ✍️", "Profile editing will be unlocked in the next HeartLink update.");
+  const confirmLogout = () => {
+    setLogoutAlertVisible(false);
+    logout();
   };
 
   return (
     <LinearGradient colors={theme.bgGrad} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.flex}>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} translucent backgroundColor="transparent" />
 
-      {/* Floating background decorative blobs */}
+      {/* Floating background decorative glowing orbs */}
       <View style={styles.glowBlobPurple} pointerEvents="none" />
       <View style={styles.glowBlobCyan} pointerEvents="none" />
 
@@ -95,11 +186,11 @@ export default function ProfileScreen() {
         bounces={false}
         contentContainerStyle={styles.scrollContainer}
       >
-        {/* Cover Photo Area */}
-        <View style={styles.coverWrapper}>
-          <Image source={{ uri: allPhotos[photoIdx] }} style={styles.coverImg} />
-          <LinearGradient colors={['rgba(0,0,0,0.4)', 'transparent']} style={styles.coverTopGrad} />
-          <LinearGradient colors={['transparent', theme.isDark ? '#0D0F1A' : '#F6F5FA']} style={styles.coverBottomGrad} />
+        {/* Top Hero Photo Banner — Full-width primary photo header */}
+        <View style={styles.heroPhotoWrapper}>
+          <Image source={{ uri: allPhotos[photoIdx] || allPhotos[0] }} style={styles.heroImg} />
+          <LinearGradient colors={['rgba(0,0,0,0.5)', 'transparent']} style={styles.heroTopGrad} />
+          <LinearGradient colors={['transparent', theme.isDark ? '#0D0F1A' : '#F6F5FA']} style={styles.heroBottomGrad} />
 
           {/* Symmetrical Top Action Bar */}
           <View style={styles.headerBar}>
@@ -117,73 +208,75 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          {/* Photo Pagination Bar */}
-          <View style={styles.photoIndicatorRow}>
-            {allPhotos.map((_, i) => (
-              <TouchableOpacity
-                key={i}
-                onPress={() => setPhotoIdx(i)}
-                style={[styles.indicatorBar, i === photoIdx && styles.indicatorBarActive]}
-              />
-            ))}
-          </View>
+          {/* Photo Indicator Dots */}
+          {allPhotos.length > 1 && (
+            <View style={styles.photoIndicatorRow}>
+              {allPhotos.map((_, i) => (
+                <TouchableOpacity
+                  key={i}
+                  onPress={() => setPhotoIdx(i)}
+                  style={[styles.indicatorBar, i === photoIdx && styles.indicatorBarActive]}
+                />
+              ))}
+            </View>
+          )}
         </View>
 
-        {/* User Card Area (Overlaps the Cover Bottom) */}
+        {/* Profile Details Container */}
         <View style={styles.profileBody}>
-          <View style={styles.avatarRow}>
-            {/* Overlapping Profile Avatar */}
-            <View style={styles.avatarRing}>
-              <Image source={{ uri: profileUser.avatar }} style={styles.avatarImg} />
+          
+          {/* Header Info & Edit Profile Button */}
+          <View style={styles.topInfoRow}>
+            <View style={styles.nameContainer}>
+              <Text style={styles.profileName}>{profileUser.name}, {profileUser.age}</Text>
+              <View style={styles.subInfoRow}>
+                <Ionicons name="briefcase-outline" size={14} color={theme.textSec} style={{ marginRight: 4 }} />
+                <Text style={styles.profileSubtext}>{profileUser.job}</Text>
+                <Text style={styles.dotSeparator}>•</Text>
+                <Ionicons name="location-outline" size={14} color={theme.textSec} style={{ marginRight: 2 }} />
+                <Text style={styles.profileSubtext}>{profileUser.location}</Text>
+              </View>
             </View>
-            
-            <TouchableOpacity style={styles.editBtn} onPress={handleEdit} activeOpacity={0.85}>
+
+            <TouchableOpacity style={styles.editBtn} onPress={handleOpenEdit} activeOpacity={0.85}>
               <LinearGradient colors={theme.gradientAccent} start={{ x:0, y:0 }} end={{ x:1, y:0 }} style={styles.editBtnGrad}>
-                <Ionicons name="create" size={14} color="#fff" />
-                <Text style={styles.editBtnText}>Edit Profile</Text>
+                <Ionicons name="create-outline" size={14} color="#fff" />
+                <Text style={styles.editBtnText}>Edit</Text>
               </LinearGradient>
             </TouchableOpacity>
           </View>
 
-          {/* Name & Details Card */}
-          <View style={styles.infoBox}>
-            <BlurView intensity={isDark ? 45 : 75} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
-            <Text style={styles.profileName}>{profileUser.name}, {profileUser.age || 26}</Text>
-            <Text style={styles.profileUsername}>{profileUser.username}</Text>
-          </View>
-
-          {/* Stats Glass Card */}
-          <View style={styles.statsCard}>
-            <BlurView intensity={isDark ? 40 : 70} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
-            <View style={styles.statCol}>
-              <Text style={styles.statNum}>{profileUser.followers}</Text>
-              <Text style={styles.statLabel}>Followers</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statCol}>
-              <Text style={styles.statNum}>{profileUser.following}</Text>
-              <Text style={styles.statLabel}>Following</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statCol}>
-              <Text style={styles.statNum}>{profileUser.likes}</Text>
-              <Text style={styles.statLabel}>Likes</Text>
-            </View>
-          </View>
-
-          {/* About Section */}
+          {/* About Me Section */}
           <View style={styles.sectionBox}>
             <BlurView intensity={isDark ? 40 : 70} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
-            <Text style={styles.sectionLabel}>About Me</Text>
+            <View style={styles.sectionHeaderRow}>
+              <Ionicons name="person-outline" size={16} color="#FF007F" style={{ marginRight: 6 }} />
+              <Text style={styles.sectionLabel}>About Me</Text>
+            </View>
             <Text style={styles.bioText}>{profileUser.bio}</Text>
+          </View>
+
+          {/* Relationship Goals Section */}
+          <View style={styles.sectionBox}>
+            <BlurView intensity={isDark ? 40 : 70} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
+            <View style={styles.sectionHeaderRow}>
+              <Ionicons name="heart-outline" size={16} color="#FF007F" style={{ marginRight: 6 }} />
+              <Text style={styles.sectionLabel}>Looking For</Text>
+            </View>
+            <View style={styles.goalChip}>
+              <Text style={styles.goalChipText}>{profileUser.relationshipType}</Text>
+            </View>
           </View>
 
           {/* Interests Section */}
           <View style={styles.sectionBox}>
             <BlurView intensity={isDark ? 40 : 70} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
-            <Text style={styles.sectionLabel}>Interests</Text>
+            <View style={styles.sectionHeaderRow}>
+              <Ionicons name="sparkles-outline" size={16} color="#FF007F" style={{ marginRight: 6 }} />
+              <Text style={styles.sectionLabel}>Interests & Hobbies</Text>
+            </View>
             <View style={styles.interestsRow}>
-              {(profileUser.interests || []).map((tag, idx) => (
+              {profileUser.interests.map((tag, idx) => (
                 <View key={idx} style={styles.interestTag}>
                   <Text style={styles.interestTagText}>{tag}</Text>
                 </View>
@@ -191,14 +284,13 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          {/* Gallery Section */}
+          {/* Registered Photo Gallery */}
           <View style={styles.galleryContainer}>
             <View style={styles.galleryHeader}>
-              <Text style={styles.galleryTitle}>Photo Gallery</Text>
-              <TouchableOpacity style={styles.addPhotoBtn} activeOpacity={0.7}>
-                <Ionicons name="add" size={14} color={theme.textPrimary} />
-                <Text style={styles.addPhotoText}>Add Photo</Text>
-              </TouchableOpacity>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="images-outline" size={16} color="#FF007F" style={{ marginRight: 6 }} />
+                <Text style={styles.galleryTitle}>Photo Gallery ({allPhotos.length})</Text>
+              </View>
             </View>
 
             <FlatList
@@ -208,47 +300,179 @@ export default function ProfileScreen() {
               showsHorizontalScrollIndicator={false}
               nestedScrollEnabled={true}
               contentContainerStyle={styles.galleryList}
-              renderItem={({ item, index }) => {
-                // Alternating asymmetrical corners matching premium styling
-                const isEven = index % 2 === 0;
-                const corners = isEven
-                  ? { borderTopLeftRadius: 18, borderBottomRightRadius: 18 }
-                  : { borderTopRightRadius: 18, borderBottomLeftRadius: 18 };
-
-                return (
-                  <TouchableOpacity
-                    style={[styles.galleryThumb, corners, index === photoIdx && styles.galleryThumbActive]}
-                    onPress={() => setPhotoIdx(index)}
-                    activeOpacity={0.9}
-                  >
-                    <Image source={{ uri: item }} style={styles.galleryThumbImg} />
-                    {index === photoIdx && (
-                      <LinearGradient
-                        colors={['rgba(255, 55, 95, 0.3)', 'transparent']}
-                        style={StyleSheet.absoluteFill}
-                      />
-                    )}
-                  </TouchableOpacity>
-                );
-              }}
+              renderItem={({ item, index }) => (
+                <TouchableOpacity
+                  style={[styles.galleryThumb, index === photoIdx && styles.galleryThumbActive]}
+                  onPress={() => setPhotoIdx(index)}
+                  activeOpacity={0.9}
+                >
+                  <Image source={{ uri: item }} style={styles.galleryThumbImg} />
+                  {index === photoIdx && (
+                    <LinearGradient
+                      colors={['rgba(255, 0, 127, 0.35)', 'transparent']}
+                      style={StyleSheet.absoluteFill}
+                    />
+                  )}
+                </TouchableOpacity>
+              )}
             />
-          </View>
-
-          {/* Profile Strength Rating */}
-          <View style={styles.sectionBox}>
-            <BlurView intensity={isDark ? 40 : 70} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
-            <Text style={styles.sectionLabel}>Profile Strength</Text>
-            <View style={styles.progressTrack}>
-              <LinearGradient
-                colors={theme.gradientAccent}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                style={[styles.progressFill, { width: '75%' }]}
-              />
-            </View>
-            <Text style={styles.progressSubtext}>75% — Complete verification to stand out to nearby matches</Text>
           </View>
         </View>
       </ScrollView>
+
+      {/* ─── Interactive Edit Profile Modal ───────────────────────────── */}
+      <Modal visible={isEditing} animationType="slide" transparent onRequestClose={() => setIsEditing(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.editModalContainer}>
+            {/* Modal Header */}
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Edit Profile</Text>
+              <TouchableOpacity onPress={() => setIsEditing(false)} style={styles.closeBtn}>
+                <Ionicons name="close" size={20} color={theme.textPrimary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalScroll}>
+              {/* Name */}
+              <Text style={styles.inputLabel}>Full Name</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={editName}
+                onChangeText={setEditName}
+                placeholder="Full Name"
+                placeholderTextColor={theme.textFaint}
+              />
+
+              {/* Job */}
+              <Text style={styles.inputLabel}>Job / Profession</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={editJob}
+                onChangeText={setEditJob}
+                placeholder="Job Title"
+                placeholderTextColor={theme.textFaint}
+              />
+
+              {/* Location */}
+              <View style={styles.rowTwo}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.inputLabel}>City</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    value={editCity}
+                    onChangeText={setEditCity}
+                    placeholder="City"
+                    placeholderTextColor={theme.textFaint}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.inputLabel}>State</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    value={editState}
+                    onChangeText={setEditState}
+                    placeholder="State"
+                    placeholderTextColor={theme.textFaint}
+                  />
+                </View>
+              </View>
+
+              {/* Relationship Goal */}
+              <Text style={styles.inputLabel}>Looking For</Text>
+              <View style={styles.relChipRow}>
+                {RELATIONSHIP_OPTIONS.map(opt => (
+                  <TouchableOpacity
+                    key={opt}
+                    style={[styles.relChip, editRelType === opt && styles.relChipActive]}
+                    onPress={() => setEditRelType(opt)}
+                  >
+                    <Text style={[styles.relChipText, editRelType === opt && styles.relChipTextActive]}>{opt}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Bio */}
+              <Text style={styles.inputLabel}>About Me (Bio)</Text>
+              <TextInput
+                style={[styles.modalInput, styles.multilineInput]}
+                value={editBio}
+                onChangeText={setEditBio}
+                placeholder="Write something about yourself..."
+                placeholderTextColor={theme.textFaint}
+                multiline
+                numberOfLines={3}
+              />
+
+              {/* Interests */}
+              <Text style={styles.inputLabel}>Interests & Hobbies</Text>
+              <View style={styles.tagInputRow}>
+                <TextInput
+                  style={[styles.modalInput, { flex: 1, marginBottom: 0 }]}
+                  value={editTagInput}
+                  onChangeText={setEditTagInput}
+                  placeholder="Add an interest (e.g. Hiking)"
+                  placeholderTextColor={theme.textFaint}
+                />
+                <TouchableOpacity style={styles.addTagBtn} onPress={handleAddInterest}>
+                  <Text style={styles.addTagBtnText}>Add</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.editInterestsRow}>
+                {editInterests.map((t, idx) => (
+                  <View key={idx} style={styles.editableTag}>
+                    <Text style={styles.editableTagText}>{t}</Text>
+                    <TouchableOpacity onPress={() => handleRemoveInterest(t)}>
+                      <Ionicons name="close-circle" size={16} color="#FF007F" style={{ marginLeft: 4 }} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+
+            {/* Save Button */}
+            <TouchableOpacity style={styles.saveBtn} onPress={handleSaveProfile} disabled={saving} activeOpacity={0.85}>
+              <LinearGradient colors={theme.gradientAccent} start={{ x:0, y:0 }} end={{ x:1, y:0 }} style={styles.saveBtnGrad}>
+                <Text style={styles.saveBtnText}>{saving ? 'Saving Changes...' : 'Save Profile Changes'}</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Custom Alert Modals */}
+      <CustomAlertModal
+        visible={logoutAlertVisible}
+        title="Logout"
+        message="Are you sure you want to log out of HeartLink?"
+        icon="log-out-outline"
+        iconColor="#FF007F"
+        confirmText="Logout"
+        cancelText="Cancel"
+        isDanger={true}
+        onConfirm={confirmLogout}
+        onCancel={() => setLogoutAlertVisible(false)}
+      />
+
+      <CustomAlertModal
+        visible={successAlertVisible}
+        title="Profile Updated!"
+        message="Your profile details have been saved to your account."
+        icon="checkmark-circle-outline"
+        iconColor="#30D158"
+        confirmText="Awesome"
+        onConfirm={() => setSuccessAlertVisible(false)}
+      />
+
+      <CustomAlertModal
+        visible={errorAlertVisible}
+        title="Notice"
+        message={errorMsg}
+        icon="alert-circle-outline"
+        iconColor="#FF007F"
+        confirmText="Got it"
+        onConfirm={() => setErrorAlertVisible(false)}
+      />
     </LinearGradient>
   );
 }
@@ -259,7 +483,7 @@ const getStyles = (theme) => StyleSheet.create({
     paddingBottom: 110,
   },
 
-  // Glowing background elements
+  // Background Glowing Orbs
   glowBlobPurple: {
     position: 'absolute',
     top: height * 0.35,
@@ -283,35 +507,33 @@ const getStyles = (theme) => StyleSheet.create({
     zIndex: 0,
   },
 
-  // Cover Image banner
-  coverWrapper: {
-    height: 260,
+  // Hero Photo Wrapper
+  heroPhotoWrapper: {
+    height: height * 0.44,
     position: 'relative',
     width: '100%',
   },
-  coverImg: {
+  heroImg: {
     position: 'absolute',
     left: 0, right: 0, top: 0, bottom: 0,
     width: '100%', height: '100%',
     resizeMode: 'cover',
   },
-  coverTopGrad: {
+  heroTopGrad: {
     position: 'absolute',
     left: 0, right: 0, top: 0,
-    height: 100,
+    height: 110,
   },
-  coverBottomGrad: {
+  heroBottomGrad: {
     position: 'absolute',
     left: 0, right: 0, bottom: 0,
-    height: 120,
+    height: 140,
   },
 
-  // Header Nav Bar overlay
+  // Header Nav Bar
   headerBar: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
+    left: 0, right: 0, top: 0,
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
@@ -328,7 +550,7 @@ const getStyles = (theme) => StyleSheet.create({
     borderRadius: 19,
     backgroundColor: 'rgba(0, 0, 0, 0.45)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderColor: 'rgba(255, 255, 255, 0.25)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -336,9 +558,8 @@ const getStyles = (theme) => StyleSheet.create({
   // Photo Dots
   photoIndicatorRow: {
     position: 'absolute',
-    bottom: 24,
-    left: 0,
-    right: 0,
+    bottom: 28,
+    left: 0, right: 0,
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 6,
@@ -346,54 +567,61 @@ const getStyles = (theme) => StyleSheet.create({
   },
   indicatorBar: {
     width: 14,
-    height: 3,
-    borderRadius: 1.5,
-    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+    height: 3.5,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.45)',
   },
   indicatorBarActive: {
     width: 28,
     backgroundColor: '#fff',
   },
 
-  // Profile Body (overlaps cover)
+  // Profile Body
   profileBody: {
     paddingHorizontal: 20,
-    marginTop: -45, // pulls avatar/card up overlapping cover image
+    marginTop: -20,
     zIndex: 20,
   },
-  avatarRow: {
+  topInfoRow: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
     justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 16,
   },
-  avatarRing: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    borderWidth: 3.5,
-    borderColor: theme.isDark ? '#0D0F1A' : '#F6F5FA',
-    backgroundColor: theme.glass,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    elevation: 6,
+  nameContainer: {
+    flex: 1,
+    paddingRight: 10,
   },
-  avatarImg: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
+  profileName: {
+    fontSize: 26,
+    fontWeight: '900',
+    color: theme.textPrimary,
+    letterSpacing: -0.5,
   },
+  subInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    flexWrap: 'wrap',
+  },
+  profileSubtext: {
+    fontSize: 13,
+    color: theme.textSec,
+    fontWeight: '500',
+  },
+  dotSeparator: {
+    color: theme.textFaint,
+    marginHorizontal: 6,
+  },
+
   editBtn: {
-    borderRadius: 18,
+    borderRadius: 20,
     overflow: 'hidden',
-    marginBottom: 4,
-    shadowColor: '#FF375F',
+    shadowColor: '#FF007F',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 3,
   },
   editBtnGrad: {
     flexDirection: 'row',
@@ -404,90 +632,52 @@ const getStyles = (theme) => StyleSheet.create({
   },
   editBtnText: {
     color: '#fff',
-    fontSize: 12.5,
+    fontSize: 13,
     fontWeight: '800',
   },
 
-  // Info details container
-  infoBox: {
-    borderRadius: 24,
+  // Section Box
+  sectionBox: {
+    borderRadius: 22,
     padding: 16,
     borderWidth: 1,
     borderColor: theme.border,
     backgroundColor: theme.glass,
     overflow: 'hidden',
-    marginBottom: 12,
+    marginBottom: 14,
   },
-  profileName: {
-    fontSize: 24,
-    fontWeight: '900',
-    color: theme.textPrimary,
-    letterSpacing: -0.5,
-  },
-  profileUsername: {
-    fontSize: 13,
-    color: theme.textSec,
-    marginTop: 3,
-    fontWeight: '500',
-  },
-
-  // Stats Card layout
-  statsCard: {
+  sectionHeaderRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
     alignItems: 'center',
-    backgroundColor: theme.glass,
-    borderRadius: 24,
-    paddingVertical: 18,
-    borderWidth: 1,
-    borderColor: theme.border,
-    marginBottom: 14,
-    overflow: 'hidden',
-  },
-  statCol: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  statNum: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: theme.textPrimary,
-    letterSpacing: -0.5,
-  },
-  statLabel: {
-    fontSize: 11.5,
-    color: theme.textSec,
-    marginTop: 4,
-    fontWeight: '600',
-  },
-  statDivider: {
-    width: 1,
-    height: 24,
-    backgroundColor: theme.border,
-  },
-
-  // Common Section card
-  sectionBox: {
-    backgroundColor: theme.glass,
-    borderRadius: 24,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: theme.border,
-    marginBottom: 14,
-    overflow: 'hidden',
+    marginBottom: 8,
   },
   sectionLabel: {
-    fontSize: 11,
+    fontSize: 14,
     fontWeight: '800',
-    color: theme.textFaint,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-    marginBottom: 10,
+    color: theme.textPrimary,
+    letterSpacing: -0.2,
   },
   bioText: {
-    fontSize: 14.5,
+    fontSize: 14,
     color: theme.textSec,
-    lineHeight: 22,
+    lineHeight: 21,
+  },
+
+  // Relationship goal chip
+  goalChip: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255, 0, 127, 0.12)',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 0, 127, 0.3)',
+    marginTop: 4,
+  },
+  goalChipText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FF007F',
   },
 
   // Interests Tags
@@ -495,66 +685,52 @@ const getStyles = (theme) => StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+    marginTop: 4,
   },
   interestTag: {
-    backgroundColor: theme.glassMid,
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    backgroundColor: theme.cardBg,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: theme.border,
   },
   interestTagText: {
-    color: theme.textPrimary,
     fontSize: 12.5,
     fontWeight: '600',
+    color: theme.textPrimary,
   },
 
   // Gallery
   galleryContainer: {
-    marginBottom: 16,
+    marginTop: 4,
+    marginBottom: 14,
   },
   galleryHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 4,
     marginBottom: 12,
   },
   galleryTitle: {
-    fontSize: 17,
-    fontWeight: '900',
+    fontSize: 15,
+    fontWeight: '800',
     color: theme.textPrimary,
-    letterSpacing: -0.2,
-  },
-  addPhotoBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: theme.glass,
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: theme.border,
-  },
-  addPhotoText: {
-    color: theme.textSec,
-    fontSize: 11.5,
-    fontWeight: '700',
   },
   galleryList: {
     gap: 12,
   },
   galleryThumb: {
-    width: 90,
-    height: 115,
+    width: 110,
+    height: 140,
+    borderRadius: 18,
     overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: theme.border,
   },
   galleryThumbActive: {
-    borderColor: '#FF375F',
+    borderColor: '#FF007F',
+    borderWidth: 2.5,
   },
   galleryThumbImg: {
     width: '100%',
@@ -562,21 +738,151 @@ const getStyles = (theme) => StyleSheet.create({
     resizeMode: 'cover',
   },
 
-  // Progress Bar
-  progressTrack: {
-    height: 6,
-    backgroundColor: theme.glassMid,
-    borderRadius: 3,
+  // ─── Edit Modal Styling ─────────────────────────────────────────────
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  editModalContainer: {
+    height: height * 0.82,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
     overflow: 'hidden',
-    marginBottom: 8,
+    padding: 22,
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.isDark ? '#0F0921' : '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 20,
   },
-  progressFill: {
-    height: '100%',
-    borderRadius: 3,
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
   },
-  progressSubtext: {
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: theme.textPrimary,
+  },
+  closeBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: theme.cardBg,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalScroll: {
+    paddingBottom: 24,
+  },
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: theme.textSec,
+    marginBottom: 6,
+    marginTop: 12,
+  },
+  modalInput: {
+    backgroundColor: theme.cardBg,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    color: theme.textPrimary,
+    fontSize: 14,
+    borderWidth: 1,
+    borderColor: theme.border,
+    marginBottom: 4,
+  },
+  multilineInput: {
+    height: 80,
+    textAlignVertical: 'top',
+  },
+  rowTwo: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  relChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  relChip: {
+    backgroundColor: theme.cardBg,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  relChipActive: {
+    backgroundColor: 'rgba(255, 0, 127, 0.15)',
+    borderColor: '#FF007F',
+  },
+  relChipText: {
     fontSize: 12.5,
     color: theme.textSec,
-    lineHeight: 18,
+    fontWeight: '600',
+  },
+  relChipTextActive: {
+    color: '#FF007F',
+    fontWeight: '800',
+  },
+  tagInputRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  addTagBtn: {
+    backgroundColor: '#FF007F',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 14,
+  },
+  addTagBtnText: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 13,
+  },
+  editInterestsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  editableTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.cardBg,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  editableTagText: {
+    fontSize: 12,
+    color: theme.textPrimary,
+    fontWeight: '600',
+  },
+  saveBtn: {
+    marginTop: 12,
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  saveBtnGrad: {
+    paddingVertical: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveBtnText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '900',
   },
 });

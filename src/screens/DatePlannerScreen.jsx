@@ -15,7 +15,7 @@ const { width, height } = Dimensions.get('window');
 const BOOSTED_RESTAURANT = {
   id: 'boost_r1',
   name: 'Amour Rooftop Bar',
-  cuisine: 'Italian Fine Dining & Wine 🍷',
+  cuisine: 'Italian Fine Dining & Wine',
   rating: '5.0',
   price: 'Rs',
   location: 'Chelsea, NY',
@@ -27,9 +27,9 @@ const BOOSTED_RESTAURANT = {
 };
 
 const RESTAURANTS = [
-  { id: 'r1', name: 'La Parisienne', cuisine: 'French Bistro 🗼', rating: '4.9', price: 'Rs', location: 'SoHo, NY', image: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400', tag: 'Most Romantic' },
-  { id: 'r2', name: 'Zen Garden Sushi', cuisine: 'Japanese Fine 🌸', rating: '4.8', price: 'Rs', location: 'Tribeca, NY', image: 'https://images.unsplash.com/photo-1579027989536-b7b1ecda6374?w=400', tag: 'Intimate Vibe' },
-  { id: 'r3', name: 'Sunset Roof Lounge', cuisine: 'Cocktails & Bites 🍹', rating: '4.7', price: 'Rs', location: 'Midtown, NY', image: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400', tag: 'Stellar Views' },
+  { id: 'r1', name: 'La Parisienne', cuisine: 'French Bistro', rating: '4.9', price: 'Rs', location: 'SoHo, NY', image: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400', tag: 'Most Romantic' },
+  { id: 'r2', name: 'Zen Garden Sushi', cuisine: 'Japanese Fine Dining', rating: '4.8', price: 'Rs', location: 'Tribeca, NY', image: 'https://images.unsplash.com/photo-1579027989536-b7b1ecda6374?w=400', tag: 'Intimate Vibe' },
+  { id: 'r3', name: 'Sunset Roof Lounge', cuisine: 'Cocktails & Bites', rating: '4.7', price: 'Rs', location: 'Midtown, NY', image: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400', tag: 'Stellar Views' },
 ];
 
 export default function DatePlannerScreen() {
@@ -66,7 +66,13 @@ export default function DatePlannerScreen() {
           <View style={styles.boostDetails}>
             <Text style={styles.boostName}>{BOOSTED_RESTAURANT.name}</Text>
             <Text style={styles.boostCuisine}>{BOOSTED_RESTAURANT.cuisine} · {BOOSTED_RESTAURANT.price}</Text>
-            <Text style={styles.boostLoc}>📍 {BOOSTED_RESTAURANT.location} · ⭐ {BOOSTED_RESTAURANT.rating}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+              <Ionicons name="location-sharp" size={13} color="#FF007F" />
+              <Text style={styles.boostLoc}>{BOOSTED_RESTAURANT.location}</Text>
+              <Text style={styles.boostLoc}>·</Text>
+              <Ionicons name="star" size={13} color="#FFD700" />
+              <Text style={styles.boostLoc}>{BOOSTED_RESTAURANT.rating}</Text>
+            </View>
           </View>
         </TouchableOpacity>
       </View>
@@ -119,7 +125,13 @@ export default function DatePlannerScreen() {
                   <View style={styles.spotTextWrap}>
                     <Text style={styles.spotName}>{item.name}</Text>
                     <Text style={styles.spotCuisine}>{item.cuisine} · {item.price}</Text>
-                    <Text style={styles.spotLoc}>📍 {item.location} · ⭐ {item.rating}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 }}>
+                      <Ionicons name="location-sharp" size={12} color="#FF007F" />
+                      <Text style={styles.spotLoc}>{item.location}</Text>
+                      <Text style={styles.spotLoc}>·</Text>
+                      <Ionicons name="star" size={12} color="#FFD700" />
+                      <Text style={styles.spotLoc}>{item.rating}</Text>
+                    </View>
                   </View>
                 </TouchableOpacity>
               );

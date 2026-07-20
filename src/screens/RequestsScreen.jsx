@@ -7,90 +7,86 @@ import {
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import ProfileDetail from '../components/discovery/ProfileDetail';
+import CustomAlertModal from '../components/CustomAlertModal';
+import { apiGetRequests, apiAcceptRequest, apiDeclineRequest } from '../services/api';
+import { ensureArray } from '../utils/helpers';
 
 const { width, height } = Dimensions.get('window');
 
-const BOOSTED_REQUEST = {
-  id: 'boost_1',
-  name: 'Elena Rostova',
-  age: 24,
-  job: 'F1 Aero Engineer 🏎️',
-  image: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=600',
-  likedAt: 'Just now',
-  bio: 'Adrenaline junkie, wind tunnel designer, and amateur racing driver. Let\'s trade stories over a fast ride. ⚡',
-  compatibility: 98,
-  mutuals: 4
-};
-
-const INCOMING = [
-  { 
-    id:'1', name:'Ava Torres', age:22, job:'Interior Designer', 
-    image:'https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=600', 
-    likedAt:'2 min ago', bio: 'Making spaces beautiful 🏡 Always looking for new inspirations in color, form, and texture. Coffee is my second language.', 
-    compatibility:88, mutuals:3 
-  },
-  { 
-    id:'2', name:'Marcus Webb', age:26, job:'Software Engineer', 
-    image:'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=600', 
-    likedAt:'45 min ago', bio: 'Code by day, cook by night 🍳 Trying to live life outside of IDEs and terminal prompts. Love cycling and local bakeries.', 
-    compatibility:75, mutuals:1 
-  },
-  { 
-    id:'3', name:'Lily Chen', age:24, job:'Graphic Designer', 
-    image:'https://images.unsplash.com/photo-1530268729831-4b0b9e170218?w=600', 
-    likedAt:'2h ago', bio: 'Typography nerd & matcha lover 🍵 Lover of minimalist design, vinyl records, and weekend city exploration.', 
-    compatibility:91, mutuals:5 
-  },
-  { 
-    id:'4', name:'Ethan Brooks', age:29, job:'Architect', 
-    image:'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600', 
-    likedAt:'5h ago', bio: 'Building dreams 🏗️ Focused on modern clean lines and sustainable architectures. Let\'s check out some nice view spots.', 
-    compatibility:69, mutuals:0 
-  },
-  { 
-    id:'5', name:'Zoe Martin', age:21, job:'Student', 
-    image:'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=600', 
-    likedAt:'1 day ago', bio: 'Lost in books, found in music 🎧 English literature major, vinyl records collector, and coffee enthusiast.', 
-    compatibility:82, mutuals:2 
-  },
-];
-
 export default function RequestsScreen() {
-  const [boosted, setBoosted] = useState(BOOSTED_REQUEST);
-  const [requests, setRequests] = useState(INCOMING);
+  const navigation = useNavigation();
+  const [boosted, setBoosted] = useState(null);
+  const [requests, setRequests] = useState([]);
   const [selectedProfile, setSelectedProfile] = useState(null);
   const [detailVisible, setDetailVisible] = useState(false);
   
   const { theme, isDark } = useTheme();
   const styles = useMemo(() => getStyles(theme), [theme]);
 
-  useEffect(() => {
-    // Prefetch all images on mount to prevent flashes
-    if (boosted) {
-      Image.prefetch(boosted.image).catch(() => {});
+  const loadRequests = async () => {
+    try {
+      const res = await apiGetRequests();
+      if (res?.requests && Array.isArray(res.requests)) {
+        const apiList = res.requests.map(u => ({
+          id: u.id,
+          name: u.name,
+          age: u.age || 24,
+          job: u.job || 'Member',
+          image: u.avatar || (u.photos && u.photos[0]?.photo_url) || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600',
+          images: ensureArray(u.photos?.map(p => (typeof p === 'string' ? p : p.photo_url || p.uri)).filter(Boolean), [u.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600']),
+          interests: ensureArray(u.interests, ['Travel', 'Music', 'Photography']),
+          likedAt: 'Recently',
+          bio: u.bio || 'Interested in connecting with you!',
+          compatibility: u.compatibility_score || 92,
+          mutuals: [],
+        }));
+        setRequests(apiList);
+      }
+    } catch (e) {
+      console.warn('Load requests error:', e?.message);
     }
-    requests.forEach(r => {
-      Image.prefetch(r.image).catch(() => {});
-    });
-  }, []);
-
-  const accept = (id) => {
-    if (boosted && boosted.id === id) {
-      setBoosted(null);
-    } else {
-      setRequests(p => p.filter(r => r.id !== id));
-    }
-    Alert.alert("It's a Match! 🎉", "You can now message each other.");
   };
 
-  const decline = (id) => {
+  useEffect(() => {
+    loadRequests();
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadRequests();
+    });
+    return unsubscribe;
+  }, [navigation]);
+
+  const [matchAlertVisible, setMatchAlertVisible] = useState(false);
+  const [declineAlertVisible, setDeclineAlertVisible] = useState(false);
+
+  const accept = async (id) => {
+    try {
+      await apiAcceptRequest(id);
+    } catch (e) {
+      console.warn('Accept error:', e?.message);
+    }
     if (boosted && boosted.id === id) {
       setBoosted(null);
     } else {
       setRequests(p => p.filter(r => r.id !== id));
     }
+    setMatchAlertVisible(true);
+  };
+
+  const decline = async (id) => {
+    try {
+      await apiDeclineRequest(id);
+    } catch (e) {
+      console.warn('Decline error:', e?.message);
+    }
+    if (boosted && boosted.id === id) {
+      setBoosted(null);
+    } else {
+      setRequests(p => p.filter(r => r.id !== id));
+    }
+    // No alert shown — the requester will be notified via notifications
   };
 
   const openProfile = (profile) => {
@@ -130,7 +126,10 @@ export default function RequestsScreen() {
           <View style={styles.boostDetails}>
             <Text style={styles.boostName}>{boosted.name}, {boosted.age}</Text>
             <Text style={styles.boostJob}>{boosted.job}</Text>
-            <Text style={styles.boostTime}>⚡ boosted {boosted.likedAt}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Ionicons name="flash" size={12} color="#FFD700" />
+              <Text style={styles.boostTime}>boosted {boosted.likedAt}</Text>
+            </View>
           </View>
 
           <View style={styles.boostActions}>
@@ -253,6 +252,16 @@ export default function RequestsScreen() {
         }}
         onLike={accept}
         onPass={decline}
+      />
+
+      <CustomAlertModal
+        visible={matchAlertVisible}
+        title="It's a Match!"
+        message="You and your admirer can now message each other."
+        icon="heart"
+        iconColor="#FF007F"
+        confirmText="Start Chatting"
+        onConfirm={() => setMatchAlertVisible(false)}
       />
     </LinearGradient>
   );

@@ -8,6 +8,7 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
+import CustomAlertModal from '../components/CustomAlertModal';
 
 const { width, height } = Dimensions.get('window');
 
@@ -163,11 +164,12 @@ export default function VibesScreen() {
     setSelectedVibe(newSelectedVibeId);
   };
 
+  const [vibeAlertMsg, setVibeAlertMsg] = useState('');
+  const [vibeAlertVisible, setVibeAlertVisible] = useState(false);
+
   const onVibeConnect = (personName) => {
-    Alert.alert(
-      "Cosmic Wave Sent! 🌌",
-      `We've sent a spark connection to ${personName} sharing your '${activeVibe.name}' vibe.`
-    );
+    setVibeAlertMsg(`We've sent a spark connection to ${personName} sharing your '${activeVibe.name}' vibe.`);
+    setVibeAlertVisible(true);
   };
 
   return (
@@ -331,6 +333,16 @@ export default function VibesScreen() {
           </ScrollView>
         </ScrollView>
       </SafeAreaView>
+
+      <CustomAlertModal
+        visible={vibeAlertVisible}
+        title="Cosmic Wave Sent!"
+        message={vibeAlertMsg}
+        icon="planet-outline"
+        iconColor="#FF007F"
+        confirmText="Awesome"
+        onConfirm={() => setVibeAlertVisible(false)}
+      />
     </LinearGradient>
   );
 }
@@ -512,7 +524,7 @@ const getStyles = (theme) => StyleSheet.create({
   },
   activeLabelText: {
     fontSize: 10,
-    fontWeight: '850',
+    fontWeight: '800',
     color: theme.textPrimary,
   },
   statusRow: {

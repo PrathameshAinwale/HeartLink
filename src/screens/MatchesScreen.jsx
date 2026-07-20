@@ -1,5 +1,5 @@
 // src/screens/MatchesScreen.jsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   Image, SafeAreaView, StatusBar, Dimensions, TextInput, ScrollView, Platform,
@@ -9,29 +9,56 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import ProfileDetail from '../components/discovery/ProfileDetail';
+import { apiGetMatches } from '../services/api';
+import { ensureArray } from '../utils/helpers';
 
 const { width, height } = Dimensions.get('window');
-
-const MATCHES = [
-  { id: '1', name: 'Sophia Carter', age: 23, image: 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=500', matchedAt: 'Today', compatibility: 95, online: true },
-  { id: '2', name: 'Mia Rodriguez', age: 25, image: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500', matchedAt: 'Yesterday', compatibility: 88, online: true },
-  { id: '3', name: 'Zoe Martin', age: 21, image: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=500', matchedAt: '2d ago', compatibility: 82, online: false },
-  { id: '4', name: 'Lily Chen', age: 24, image: 'https://images.unsplash.com/photo-1530268729831-4b0b9e170218?w=500', matchedAt: '3d ago', compatibility: 91, online: true },
-  { id: '5', name: 'Aria Sterling', age: 22, image: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500', matchedAt: '4d ago', compatibility: 96, online: true },
-  { id: '6', name: 'Elena Petrova', age: 26, image: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=500', matchedAt: '5d ago', compatibility: 89, online: false }
-];
 
 export default function MatchesScreen() {
   const navigation = useNavigation();
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const [matches, setMatches] = useState(MATCHES);
+  const [matches, setMatches] = useState([]);
 
-  const { theme, isDark } = useTheme();
-  const styles = useMemo(() => getStyles(theme), [theme]);
+  const fetchMatches = async () => {
+    try {
+      const res = await apiGetMatches();
+      if (res?.matches && Array.isArray(res.matches)) {
+        const apiList = res.matches.map(m => {
+          const u = m.user || {};
+          return {
+            id: u.id,
+            name: u.name || 'Match',
+            age: u.age || 24,
+            image: u.avatar || (u.photos && u.photos[0]?.photo_url) || 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=500',
+            images: ensureArray(u.photos?.map(p => (typeof p === 'string' ? p : p.photo_url || p.uri)).filter(Boolean), [u.avatar || 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=500']),
+            interests: ensureArray(u.interests, ['Travel', 'Music', 'Photography']),
+            matchedAt: 'Recently',
+            compatibility: u.compatibility_score || 90,
+            online: (bool => bool)(u.is_online),
+            user: u,
+          };
+        });
+        setMatches(apiList);
+      }
+    } catch (e) {
+      console.warn('Fetch matches error:', e?.message);
+    }
+  };
+
+  useEffect(() => {
+    fetchMatches();
+    const unsubscribe = navigation.addListener('focus', () => {
+      fetchMatches();
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   const [detailVisible, setDetailVisible] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState(null);
+
+  const { theme, isDark } = useTheme();
+  const styles = useMemo(() => getStyles(theme), [theme]);
 
   const filtered = matches.filter(m => 
     m.name.toLowerCase().includes(search.toLowerCase())
@@ -43,10 +70,11 @@ export default function MatchesScreen() {
     // Map properties to match DiscoverScreen schema
     const formatted = {
       ...profile,
-      images: [profile.image],
+      images: ensureArray(profile.images, [profile.image]),
+      interests: ensureArray(profile.interests, ['Travel', 'Music', 'Photography']),
       job: 'Connections',
       distance: profile.matchedAt,
-      bio: 'You matched! Open chat to start sharing cosmic vibes. ✨'
+      bio: profile.user?.bio || 'You matched! Open chat to start sharing cosmic vibes.'
     };
     setSelectedProfile(formatted);
     setDetailVisible(true);
@@ -151,15 +179,25 @@ export default function MatchesScreen() {
           </View>
         )}
 
-        <FlatList
-          data={filtered}
-          renderItem={renderCard}
-          keyExtractor={i => i.id}
-          numColumns={2}
-          columnWrapperStyle={styles.colWrapper}
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}
-        />
+        {filtered.length === 0 ? (
+          <View style={styles.emptyWrap}>
+            <View style={styles.emptyCard}>
+              <Ionicons name="heart-circle-outline" size={60} color={theme.textFaint} />
+              <Text style={styles.emptyTitle}>No matches yet</Text>
+              <Text style={styles.emptySub}>Start swiping on the Discover screen to find your cosmic connections</Text>
+            </View>
+          </View>
+        ) : (
+          <FlatList
+            data={filtered}
+            renderItem={renderCard}
+            keyExtractor={i => i.id}
+            numColumns={2}
+            columnWrapperStyle={styles.colWrapper}
+            contentContainerStyle={styles.list}
+            showsVerticalScrollIndicator={false}
+          />
+        )}
       </SafeAreaView>
 
       {/* Match details slide-up */}
@@ -384,4 +422,17 @@ const getStyles = (theme) => StyleSheet.create({
 
   msgBtnRound: { width: 34, height: 34, borderRadius: 17, overflow: 'hidden' },
   msgBtnGrad: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+
+  // Premium empty state
+  emptyWrap:  { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30 },
+  emptyCard: {
+    backgroundColor: theme.glass, borderRadius: 24, padding: 32,
+    alignItems: 'center', gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+  },
+  emptyTitle: { fontSize: 20, fontWeight: '800', color: theme.textPrimary },
+  emptySub:   { fontSize: 14, color: theme.textSec, textAlign: 'center', lineHeight: 21 },
 });

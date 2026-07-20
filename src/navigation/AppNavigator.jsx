@@ -9,14 +9,24 @@ import ChatDetailScreen from '../screens/ChatDetailScreen';
 import ProfileScreen    from '../screens/ProfileScreen';
 import RequestsScreen   from '../screens/RequestsScreen';
 import RestaurantDetailScreen from '../screens/RestaurantDetailScreen';
+import PlansScreen from '../screens/PlansScreen';
+import { ActivityIndicator, View } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../theme/ThemeContext';
 
 const Stack = createStackNavigator();
 
 export default function AppNavigator() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
   const { isDark, theme } = useTheme();
+
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: isDark ? '#0D0F1D' : '#F6F5FA', justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#FF007F" />
+      </View>
+    );
+  }
 
   return (
     <>
@@ -39,6 +49,7 @@ export default function AppNavigator() {
               <Stack.Screen name="Profile"    component={ProfileScreen} />
               <Stack.Screen name="Requests"   component={RequestsScreen} />
               <Stack.Screen name="RestaurantDetail" component={RestaurantDetailScreen} />
+              <Stack.Screen name="Plans"      component={PlansScreen} options={{ presentation: 'modal' }} />
             </>
           ) : (
             <Stack.Screen

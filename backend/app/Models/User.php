@@ -1,0 +1,82 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
+
+class User extends Authenticatable
+{
+    use HasApiTokens, HasFactory, Notifiable;
+
+    protected $fillable = [
+        'name',
+        'email',
+        'password',
+        'age',
+        'dob',
+        'gender',
+        'bio',
+        'job',
+        'avatar',
+        'city',
+        'state',
+        'country',
+        'relationship_type',
+        'age_min',
+        'age_max',
+        'latitude',
+        'longitude',
+        'is_online',
+        'compatibility_score',
+        'interests',
+    ];
+
+    protected $hidden = [
+        'password',
+        'remember_token',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'email_verified_at' => 'datetime',
+            'password' => 'hashed',
+            'is_online' => 'boolean',
+            'interests' => 'array',
+        ];
+    }
+
+    public function photos()
+    {
+        return $this->hasMany(ProfilePhoto::class)->orderBy('sort_order', 'asc');
+    }
+
+    public function swipes()
+    {
+        return $this->hasMany(Swipe::class, 'swiper_id');
+    }
+
+    public function matches()
+    {
+        return $this->hasMany(UserMatch::class, 'user_1_id')
+            ->orWhere('user_2_id', $this->id);
+    }
+
+    public function messagesSent()
+    {
+        return $this->hasMany(Message::class, 'sender_id');
+    }
+
+    public function messagesReceived()
+    {
+        return $this->hasMany(Message::class, 'receiver_id');
+    }
+
+    public function activeSubscription()
+    {
+        return $this->hasOne(UserSubscription::class)->where('status', 'active')->latestOfMany();
+    }
+}

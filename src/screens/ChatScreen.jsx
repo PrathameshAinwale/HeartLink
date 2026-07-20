@@ -1,5 +1,5 @@
 // src/screens/ChatScreen.jsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   Image, SafeAreaView, StatusBar, TextInput, ScrollView, Dimensions, Platform,
@@ -9,33 +9,63 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
+import { apiGetConversations } from '../services/api';
 
 const { width, height } = Dimensions.get('window');
-
-const CHATS = [
-  { id:'1', name:'Sophia Carter',   time:'2m',  unread:3, online:true,  lastMsg:"Hey! Free this weekend? 🌸",    image:'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=400' },
-  { id:'2', name:'Mia Rodriguez',   time:'18m', unread:0, online:true,  lastMsg:'That sounds amazing! 🎨',        image:'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400' },
-  { id:'3', name:'James Whitfield', time:'1h',  unread:0, online:false, lastMsg:'Coffee tomorrow? ☕',            image:'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400' },
-  { id:'4', name:'Zoe Martin',      time:'3h',  unread:1, online:false, lastMsg:'Can we reschedule? 🙏',          image:'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=400' },
-  { id:'5', name:'Lily Chen',       time:'5h',  unread:0, online:false, lastMsg:'Loved your gallery btw! 😍',    image:'https://images.unsplash.com/photo-1530268729831-4b0b9e170218?w=400' },
-  { id:'6', name:'Marcus Webb',     time:'1d',  unread:0, online:false, lastMsg:'So when are we meeting? 😊',    image:'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400' },
-];
 
 export default function ChatScreen() {
   const navigation = useNavigation();
   const [search, setSearch]         = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
+  const [chats, setChats]           = useState([]);
   
   const { theme, isDark } = useTheme();
   const styles = useMemo(() => getStyles(theme), [theme]);
 
-  const filtered = CHATS.filter(c => c.name.toLowerCase().includes(search.toLowerCase()));
-  const activeSparks = CHATS.filter(c => c.online);
+  const fetchConversations = async () => {
+    try {
+      const res = await apiGetConversations();
+      if (res?.conversations && Array.isArray(res.conversations)) {
+        const apiList = res.conversations.map(c => ({
+          id: c.id,
+          name: c.name,
+          time: c.last_time || 'Now',
+          unread: c.unread_count || 0,
+          online: (bool => bool)(c.online),
+          lastMsg: c.last_msg || 'Matched! Start chatting now.',
+          image: c.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400',
+          user: c.user,
+        }));
+        setChats(apiList);
+      }
+    } catch (e) {
+      console.warn('Fetch conversations error:', e?.message);
+    }
+  };
+
+  useEffect(() => {
+    fetchConversations();
+    const unsubscribe = navigation.addListener('focus', () => {
+      fetchConversations();
+    });
+
+    const interval = setInterval(() => {
+      fetchConversations();
+    }, 3000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
+  }, [navigation]);
+
+  const filtered = chats.filter(c => c.name.toLowerCase().includes(search.toLowerCase()));
+  const activeSparks = chats.filter(c => c.online);
 
   const renderChat = ({ item }) => (
     <TouchableOpacity
       style={styles.chatCard}
-      onPress={() => navigation.navigate('ChatDetail', { userId: item.id })}
+      onPress={() => navigation.navigate('ChatDetail', { userId: item.id, user: item.user })}
       activeOpacity={0.80}
     >
       {/* Frosted Glass Background */}
@@ -58,7 +88,7 @@ export default function ChatScreen() {
           <Text style={[styles.chatTime, item.unread > 0 && { color: theme.accent }]}>{item.time}</Text>
         </View>
         <View style={styles.chatRow}>
-          <Text style={[styles.chatMsg, item.unread > 0 && { color: theme.textSec, fontWeight: '750' }]} numberOfLines={1}>
+          <Text style={[styles.chatMsg, item.unread > 0 && { color: theme.textSec, fontWeight: '700' }]} numberOfLines={1}>
             {item.lastMsg}
           </Text>
           {item.unread > 0 && (
@@ -122,9 +152,12 @@ export default function ChatScreen() {
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={renderHeader}
           ListEmptyComponent={
-            <View style={styles.empty}>
-              <Ionicons name="chatbubbles-outline" size={48} color={theme.textFaint} />
-              <Text style={styles.emptyText}>No conversations yet</Text>
+            <View style={styles.emptyWrap}>
+              <View style={styles.emptyCard}>
+                <Ionicons name="chatbubbles-outline" size={60} color={theme.textFaint} />
+                <Text style={styles.emptyTitle}>No messages yet</Text>
+                <Text style={styles.emptySub}>When you match with someone, your conversations will appear here</Text>
+              </View>
             </View>
           }
         />
@@ -259,4 +292,17 @@ const getStyles = (theme) => StyleSheet.create({
   unreadText: { color: '#fff', fontSize: 10, fontWeight: '900' },
   empty:      { alignItems: 'center', paddingTop: 60, gap: 12 },
   emptyText:  { color: theme.textSec, fontSize: 15 },
+
+  // Premium empty state (matches RequestsScreen pattern)
+  emptyWrap:  { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30, paddingTop: 60 },
+  emptyCard: {
+    backgroundColor: theme.glass, borderRadius: 24, padding: 32,
+    alignItems: 'center', gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+  },
+  emptyTitle: { fontSize: 20, fontWeight: '800', color: theme.textPrimary },
+  emptySub:   { fontSize: 14, color: theme.textSec, textAlign: 'center', lineHeight: 21 },
 });

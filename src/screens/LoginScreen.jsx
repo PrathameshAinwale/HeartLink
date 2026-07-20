@@ -9,6 +9,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../theme/ThemeContext';
+import { loginUser } from '../services/authService';
+import CustomAlertModal from '../components/CustomAlertModal';
 
 const { width, height } = Dimensions.get('window');
 
@@ -57,10 +59,29 @@ export default function LoginScreen({ navigation }) {
   const float2Y    = float2.interpolate({ inputRange: [0, 1], outputRange: [0, 18] });
   const heartScale = shimmer.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] });
 
-  const handleLogin = () => {
-    if (!email.trim() || !password.trim()) return;
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertTitle, setAlertTitle] = useState('');
+  const [alertMsg, setAlertMsg] = useState('');
+
+  const handleLogin = async () => {
+    if (!email.trim() || !password.trim()) {
+      setAlertTitle('Missing Credentials');
+      setAlertMsg('Please enter both your email address and password to sign in.');
+      setAlertVisible(true);
+      return;
+    }
+
     setLoading(true);
-    setTimeout(() => { setLoading(false); login({ email }); }, 1200);
+    try {
+      const res = await loginUser(email.trim(), password.trim());
+      setLoading(false);
+      login(res.user, res.access_token);
+    } catch (err) {
+      setLoading(false);
+      setAlertTitle('Login Failed');
+      setAlertMsg(err.message || 'Invalid email or password. Please check your credentials and try again.');
+      setAlertVisible(true);
+    }
   };
 
   return (
@@ -98,7 +119,7 @@ export default function LoginScreen({ navigation }) {
           <Animated.View style={[styles.logoSection, { opacity: logoAnim, transform: [{ scale: logoAnim }] }]}>
             <Animated.View style={{ transform: [{ scale: heartScale }], marginBottom: 10 }}>
               <LinearGradient colors={['#FF007F', '#B5179E']} style={styles.heartGrad}>
-                <Text style={styles.heartEmoji}>💗</Text>
+                <Ionicons name="heart" size={30} color="#fff" />
               </LinearGradient>
             </Animated.View>
             <Text style={styles.logoTitle}>HeartLink</Text>
@@ -224,6 +245,16 @@ export default function LoginScreen({ navigation }) {
 
         </View>
       </KeyboardAvoidingView>
+
+      <CustomAlertModal
+        visible={alertVisible}
+        title={alertTitle}
+        message={alertMsg}
+        icon="alert-circle-outline"
+        iconColor="#FF007F"
+        confirmText="Got it"
+        onConfirm={() => setAlertVisible(false)}
+      />
     </View>
   );
 }

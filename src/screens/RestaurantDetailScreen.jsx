@@ -1,5 +1,5 @@
 // src/screens/RestaurantDetailScreen.jsx — Restaurant Details & Interactive Booking Scheduler
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   Image, SafeAreaView, StatusBar, ScrollView, Dimensions, Alert, Linking, Platform,
@@ -10,15 +10,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTheme } from '../theme/ThemeContext';
+import { apiCreateDateProposal, apiGetMatches } from '../services/api';
+import CustomAlertModal from '../components/CustomAlertModal';
 
 const { width, height } = Dimensions.get('window');
-
-const MATCHES = [
-  { id: '1', name: 'Sophia Carter', image: 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=150' },
-  { id: '2', name: 'Mia Rodriguez', image: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150' },
-  { id: '3', name: 'Zoe Martin', image: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=150' },
-  { id: '4', name: 'Lily Chen', image: 'https://images.unsplash.com/photo-1530268729831-4b0b9e170218?w=150' },
-];
 
 const DATE_OPTIONS = ['Tonight', 'Tomorrow', 'This Friday', 'This Saturday'];
 const TIME_OPTIONS = ['7:00 PM', '8:00 PM', '8:30 PM', '9:00 PM'];
@@ -35,7 +30,7 @@ export default function RestaurantDetailScreen() {
     return route.params?.spot || {
       id: 'r1',
       name: 'La Parisienne',
-      cuisine: 'French Bistro 🗼',
+      cuisine: 'French Bistro',
       rating: '4.9',
       price: '$$$',
       location: 'SoHo, NY',
@@ -48,12 +43,37 @@ export default function RestaurantDetailScreen() {
   }, [route.params]);
 
   const [bookingVisible, setBookingVisible] = useState(false);
-  const [partner, setPartner] = useState(MATCHES[0].id);
+  const [matchOptions, setMatchOptions] = useState([]);
+  const [partner, setPartner] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
 
-  const selectedPartnerName = useMemo(() => MATCHES.find(m => m.id === partner)?.name.split(' ')[0], [partner]);
+  useEffect(() => {
+    const fetchMatches = async () => {
+      try {
+        const res = await apiGetMatches();
+        if (res?.matches && Array.isArray(res.matches) && res.matches.length > 0) {
+          const apiList = res.matches.map(m => {
+            const u = m.user || {};
+            return {
+              id: u.id,
+              name: u.name || 'Match',
+              image: u.avatar || (u.photos && u.photos[0]?.photo_url) || 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=150',
+            };
+          });
+          setMatchOptions(apiList);
+          setPartner(apiList[0].id);
+        }
+      } catch (e) {}
+    };
+    fetchMatches();
+  }, []);
+
+  const selectedPartnerName = useMemo(() => {
+    const found = matchOptions.find(m => m.id === partner);
+    return found ? found.name.split(' ')[0] : 'your match';
+  }, [matchOptions, partner]);
 
   const formattedDate = useMemo(() => {
     const options = { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' };
@@ -65,20 +85,19 @@ export default function RestaurantDetailScreen() {
     return selectedDate.toLocaleTimeString('en-US', options);
   }, [selectedDate]);
 
+  const [bookingAlertVisible, setBookingAlertVisible] = useState(false);
+  const [mapAlertVisible, setMapAlertVisible] = useState(false);
+
   const openGoogleMaps = () => {
     const query = encodeURIComponent(`${spot.name} ${spot.location}`);
     const mapsUrl = spot.mapUrl || `https://www.google.com/maps/search/?api=1&query=${query}`;
     Linking.openURL(mapsUrl).catch(() => {
-      Alert.alert("Unable to open map", "Please check your network settings.");
+      setMapAlertVisible(true);
     });
   };
 
   const confirmBooking = () => {
-    Alert.alert(
-      "Cosmic Date Proposal Sent! 🥂",
-      `We've sent your request to meet ${selectedPartnerName} at ${spot.name} on ${formattedDate} at ${formattedTime}. We'll notify you when they confirm!`,
-      [{ text: "Great!", onPress: () => navigation.goBack() }]
-    );
+    setBookingAlertVisible(true);
   };
 
   return (
@@ -150,7 +169,7 @@ export default function RestaurantDetailScreen() {
             {/* Step 1: Select Partner */}
             <Text style={styles.sectionLabel}>Select Your Match</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.avatarList}>
-              {MATCHES.map(item => {
+              {matchOptions.map(item => {
                 const active = item.id === partner;
                 return (
                   <TouchableOpacity
@@ -253,6 +272,29 @@ export default function RestaurantDetailScreen() {
           </View>
         )}
       </ScrollView>
+
+      <CustomAlertModal
+        visible={bookingAlertVisible}
+        title="Cosmic Date Proposal Sent!"
+        message={`We've sent your request to meet ${selectedPartnerName} at ${spot.name} on ${formattedDate} at ${formattedTime}. We'll notify you when they confirm!`}
+        icon="wine-outline"
+        iconColor="#FF007F"
+        confirmText="Great!"
+        onConfirm={() => {
+          setBookingAlertVisible(false);
+          navigation.goBack();
+        }}
+      />
+
+      <CustomAlertModal
+        visible={mapAlertVisible}
+        title="Unable to open map"
+        message="Please check your network settings."
+        icon="navigate-circle-outline"
+        iconColor="#FF375F"
+        confirmText="OK"
+        onConfirm={() => setMapAlertVisible(false)}
+      />
     </LinearGradient>
   );
 }

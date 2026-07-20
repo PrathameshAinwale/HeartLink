@@ -7,6 +7,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import { ensureArray } from '../../utils/helpers';
 
 const { width, height } = Dimensions.get('window');
 
@@ -17,8 +18,11 @@ export default function ProfileDetail({ visible, profile, onClose, onLike, onPas
 
   if (!profile) return null;
 
-  const photos = profile.images && profile.images.length > 0 ? profile.images : [profile.image];
-  const interests = profile.interests && profile.interests.length > 0 ? profile.interests : ['Travel', 'Music', 'Coffee', 'Fitness'];
+  const photos = ensureArray(
+    profile.images && profile.images.length > 0 ? profile.images : profile.photos,
+    [profile.image || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800']
+  );
+  const interests = ensureArray(profile.interests, ['Travel', 'Music', 'Coffee', 'Fitness']);
 
   return (
     <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
