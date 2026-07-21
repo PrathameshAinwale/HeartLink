@@ -10,7 +10,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../hooks/useAuth';
-import { apiSwipeUser, apiGetDiscoveryFeed } from '../services/api';
+import { apiSwipeUser, apiGetDiscoveryFeed, apiGetRequests } from '../services/api';
+import { ensureArray } from '../utils/helpers';
 
 const { width, height } = Dimensions.get('window');
 
@@ -164,6 +165,7 @@ export default function DiscoverScreen() {
 
   const { user } = useAuth();
   const [dbProfiles, setDbProfiles] = useState([]);
+  const [requestCount, setRequestCount] = useState(0);
 
   const formatApiProfile = (u) => {
     let userPhotos = [];
@@ -199,10 +201,20 @@ export default function DiscoverScreen() {
 
   const fetchFeed = async () => {
     try {
-      const res = await apiGetDiscoveryFeed();
-      if (res?.profiles && Array.isArray(res.profiles) && res.profiles.length > 0) {
-        const formatted = res.profiles.map(formatApiProfile);
+      const [fRes, rRes] = await Promise.all([
+        apiGetDiscoveryFeed().catch(() => null),
+        apiGetRequests().catch(() => null),
+      ]);
+
+      if (fRes?.profiles && Array.isArray(fRes.profiles) && fRes.profiles.length > 0) {
+        const formatted = fRes.profiles.map(formatApiProfile);
         setDbProfiles(formatted);
+      }
+
+      if (rRes?.requests && Array.isArray(rRes.requests)) {
+        setRequestCount(rRes.requests.length);
+      } else {
+        setRequestCount(0);
       }
     } catch (err) {
       console.warn('Discovery Feed fetch error:', err?.message);
@@ -219,18 +231,24 @@ export default function DiscoverScreen() {
   }, [navigation]);
 
   const activeProfiles = useMemo(() => {
-    if (dbProfiles.length > 0) {
-      return dbProfiles;
-    }
     const userGender = (user?.gender || 'Man').toLowerCase();
-    const targetGender = (userGender === 'man' || userGender === 'male') ? 'female' : 'male';
-    const list = PROFILES.filter(p => !p.gender || p.gender.toLowerCase() === targetGender);
-    return list.length > 0 ? list : PROFILES;
+    const isMaleUser = userGender === 'man' || userGender === 'male';
+    const targetGenders = isMaleUser ? ['female', 'woman'] : ['male', 'man'];
+
+    if (dbProfiles.length > 0) {
+      const filtered = dbProfiles.filter(p => !p.gender || targetGenders.includes(p.gender.toLowerCase()));
+      return filtered.length > 0 ? filtered : dbProfiles;
+    }
+
+    return PROFILES.filter(p => p.gender && targetGenders.includes(p.gender.toLowerCase()));
   }, [dbProfiles, user]);
 
-  // Get profiles for the 3 cards
+  // Get profiles for the 3 cards safely without infinite looping
   const getProfileAt = (offset) => {
-    return activeProfiles[(currentIndex + offset) % activeProfiles.length];
+    if (!activeProfiles || activeProfiles.length === 0) return null;
+    const idx = currentIndex + offset;
+    if (idx >= activeProfiles.length) return null;
+    return activeProfiles[idx];
   };
 
   const currentProfile = getProfileAt(0);
@@ -483,9 +501,11 @@ export default function DiscoverScreen() {
 
           <TouchableOpacity style={styles.headerRightBtn} onPress={() => navigation.navigate('Requests')} activeOpacity={0.7}>
             <Ionicons name="notifications" size={19} color={theme.textPrimary} />
-            <View style={styles.headerBadge}>
-              <Text style={styles.headerBadgeText}>5</Text>
-            </View>
+            {requestCount > 0 && (
+              <View style={styles.headerBadge}>
+                <Text style={styles.headerBadgeText}>{requestCount > 99 ? '99+' : requestCount}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -515,18 +535,33 @@ export default function DiscoverScreen() {
             cardHeightRef.current = e.nativeEvent.layout.height;
           }}
         >
-          {activeProfiles.length === 0 ? (
+          {!currentProfile || activeProfiles.length === 0 ? (
             <View style={styles.emptyWrap}>
               <View style={styles.emptyCard}>
-                <Ionicons name="telescope-outline" size={60} color={theme.textFaint} />
+                <Ionicons name="sparkles-outline" size={60} color="#FF007F" />
                 <Text style={styles.emptyTitle}>You're all caught up!</Text>
-                <Text style={styles.emptySub}>Check back later for new profiles, or explore the Matches tab to connect with people you've liked</Text>
+                <Text style={styles.emptySub}>
+                  You've seen all available profiles for today. Come back tomorrow for new people in your area! 🌟
+                </Text>
+                <TouchableOpacity
+                  style={styles.emptyBtn}
+                  onPress={() => {
+                    setCurrentIndex(0);
+                    fetchFeed();
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <LinearGradient colors={theme.gradientAccent} style={styles.emptyBtnGrad}>
+                    <Ionicons name="refresh-outline" size={16} color="#FFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.emptyBtnTxt}>Check Again</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
               </View>
             </View>
           ) : (
           <>
           {/* Card 3 (Back-most) - Hidden during transition */}
-          {showBackgroundCards && (
+          {showBackgroundCards && nextNextProfile && (
             <Animated.View style={[
               styles.card,
               styles.cardBack2,
@@ -538,7 +573,7 @@ export default function DiscoverScreen() {
                 ]
               }
             ]}>
-              <Image source={{ uri: nextNextProfile.images[0] }} style={styles.cardPhoto} />
+              <Image source={{ uri: nextNextProfile.images?.[0] || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=900' }} style={styles.cardPhoto} />
               <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.75)']} style={styles.bottomGrad} />
               <View style={styles.cardTextOverlayBottomLeft}>
                 <Text style={styles.cardProfileName}>{nextNextProfile.name}, {nextNextProfile.age}</Text>
@@ -548,7 +583,7 @@ export default function DiscoverScreen() {
           )}
 
           {/* Card 2 (Middle) - Hidden during transition */}
-          {showBackgroundCards && (
+          {showBackgroundCards && nextProfile && (
             <Animated.View style={[
               styles.card,
               styles.cardBack1,
@@ -560,7 +595,7 @@ export default function DiscoverScreen() {
                 ]
               }
             ]}>
-              <Image source={{ uri: nextProfile.images[0] }} style={styles.cardPhoto} />
+              <Image source={{ uri: nextProfile.images?.[0] || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=900' }} style={styles.cardPhoto} />
               <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.75)']} style={styles.bottomGrad} />
               <View style={styles.cardTextOverlayBottomLeft}>
                 <Text style={styles.cardProfileName}>{nextProfile.name}, {nextProfile.age}</Text>
@@ -1437,4 +1472,21 @@ const getStyles = (theme) => StyleSheet.create({
   },
   emptyTitle: { fontSize: 20, fontWeight: '800', color: theme.textPrimary },
   emptySub:   { fontSize: 14, color: theme.textSec, textAlign: 'center', lineHeight: 21 },
+  emptyBtn: {
+    marginTop: 10,
+    borderRadius: 22,
+    overflow: 'hidden',
+  },
+  emptyBtnGrad: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 22,
+  },
+  emptyBtnTxt: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+  },
 });

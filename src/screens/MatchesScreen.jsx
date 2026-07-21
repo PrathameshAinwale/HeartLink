@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import ProfileDetail from '../components/discovery/ProfileDetail';
-import { apiGetMatches } from '../services/api';
+import { apiGetMatches, apiGetRequests } from '../services/api';
 import { ensureArray } from '../utils/helpers';
 
 const { width, height } = Dimensions.get('window');
@@ -19,12 +19,17 @@ export default function MatchesScreen() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [matches, setMatches] = useState([]);
+  const [requestCount, setRequestCount] = useState(0);
 
   const fetchMatches = async () => {
     try {
-      const res = await apiGetMatches();
-      if (res?.matches && Array.isArray(res.matches)) {
-        const apiList = res.matches.map(m => {
+      const [mRes, rRes] = await Promise.all([
+        apiGetMatches().catch(() => null),
+        apiGetRequests().catch(() => null),
+      ]);
+
+      if (mRes?.matches && Array.isArray(mRes.matches)) {
+        const apiList = mRes.matches.map(m => {
           const u = m.user || {};
           return {
             id: u.id,
@@ -40,6 +45,10 @@ export default function MatchesScreen() {
           };
         });
         setMatches(apiList);
+      }
+
+      if (rRes?.requests && Array.isArray(rRes.requests)) {
+        setRequestCount(rRes.requests.length);
       }
     } catch (e) {
       console.warn('Fetch matches error:', e?.message);
@@ -159,9 +168,23 @@ export default function MatchesScreen() {
             <Text style={styles.title}>Matches</Text>
             <Text style={styles.sub}>{filtered.length} connections</Text>
           </View>
-          <TouchableOpacity style={styles.iconBtn} onPress={() => setSearchOpen(p => !p)}>
-            <Ionicons name={searchOpen ? 'close' : 'search'} size={19} color={theme.textPrimary} />
-          </TouchableOpacity>
+
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <TouchableOpacity
+              style={styles.requestsHeaderBtn}
+              onPress={() => navigation.navigate('Requests')}
+              activeOpacity={0.8}
+            >
+              <LinearGradient colors={theme.gradientAccent} style={styles.requestsHeaderGrad}>
+                <Ionicons name="sparkles" size={13} color="#FFFFFF" style={{ marginRight: 5 }} />
+                <Text style={styles.requestsHeaderTxt}>Requests {requestCount > 0 ? `(${requestCount})` : ''}</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.iconBtn} onPress={() => setSearchOpen(p => !p)}>
+              <Ionicons name={searchOpen ? 'close' : 'search'} size={19} color={theme.textPrimary} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Glass search input */}
@@ -253,6 +276,22 @@ const getStyles = (theme) => StyleSheet.create({
   },
   title: { fontSize: 28, fontWeight: '900', color: theme.textPrimary, letterSpacing: -0.6 },
   sub: { fontSize: 13, color: theme.textSec, marginTop: 3 },
+  requestsHeaderBtn: {
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  requestsHeaderGrad: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  requestsHeaderTxt: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
   iconBtn: {
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: theme.glass, borderWidth: 1, borderColor: theme.border,

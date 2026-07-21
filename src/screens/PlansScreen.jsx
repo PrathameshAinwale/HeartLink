@@ -148,8 +148,6 @@ export default function PlansScreen() {
     return (
       <Animated.View style={[styles.cardWrapper, { transform: [{ scale }], opacity }]}>
         <View style={styles.cardContainer}>
-          <BlurView intensity={isDark ? 60 : 90} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
-
           {/* Top Subtle Gradient Glow */}
           <LinearGradient
             colors={[card.glowColor, 'transparent']}
@@ -253,7 +251,6 @@ export default function PlansScreen() {
 
           {/* Sticky CTA Button at Bottom of Card */}
           <View style={styles.cardCtaWrap}>
-            <BlurView intensity={isDark ? 85 : 95} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
             <TouchableOpacity
               onPress={() => handleSubscribe(card)}
               activeOpacity={0.88}
@@ -318,7 +315,7 @@ export default function PlansScreen() {
             contentContainerStyle={styles.flatListContent}
             onScroll={Animated.event(
               [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-              { useNativeDriver: true }
+              { useNativeDriver: false }
             )}
             onMomentumScrollEnd={(e) => {
               const newIndex = Math.round(e.nativeEvent.contentOffset.x / CARD_WIDTH);
@@ -459,19 +456,21 @@ const getStyles = (theme) => StyleSheet.create({
   cardWrapper: {
     width: CARD_WIDTH,
     height: height * 0.71,
-    paddingHorizontal: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: theme.isDark ? 0.45 : 0.15,
+    shadowRadius: 18,
+    elevation: 8,
   },
   cardContainer: {
     flex: 1,
     borderRadius: 28,
-    borderWidth: 1,
-    borderColor: theme.border,
+    borderWidth: 1.2,
+    borderColor: theme.isDark ? 'rgba(255, 255, 255, 0.18)' : 'rgba(255, 255, 255, 0.85)',
+    backgroundColor: theme.isDark ? '#1C1433' : '#FFFFFF',
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.35,
-    shadowRadius: 18,
-    elevation: 8,
   },
   cardInnerScroll: {
     padding: 18,
@@ -509,10 +508,6 @@ const getStyles = (theme) => StyleSheet.create({
     borderRadius: 30,
     overflow: 'hidden',
     marginBottom: 10,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 6,
   },
   iconGrad: {
     flex: 1,
@@ -554,7 +549,7 @@ const getStyles = (theme) => StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     borderColor: theme.border,
-    backgroundColor: theme.glass,
+    backgroundColor: theme.isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.03)',
     overflow: 'hidden',
   },
   durTabSelected: {
@@ -645,16 +640,13 @@ const getStyles = (theme) => StyleSheet.create({
     padding: 14,
     borderTopWidth: 1,
     borderTopColor: theme.border,
+    backgroundColor: theme.isDark ? '#1C1433' : '#FFFFFF',
     overflow: 'hidden',
   },
   cardCtaBtn: {
     height: 48,
     borderRadius: 24,
     overflow: 'hidden',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 6,
   },
   cardCtaGrad: {
     flex: 1,

@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../theme/ThemeContext';
+import * as ImagePicker from 'expo-image-picker';
 import { updateUserProfile } from '../services/userService';
 import { ensureArray } from '../utils/helpers';
 
@@ -97,6 +98,63 @@ export default function ProfileScreen() {
   const [successAlertVisible, setSuccessAlertVisible] = useState(false);
   const [errorAlertVisible, setErrorAlertVisible] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Photo Picker & Crop Modal State
+  const [photoPickerVisible, setPhotoPickerVisible] = useState(false);
+
+  const handlePickPhoto = async (sourceType) => {
+    setPhotoPickerVisible(false);
+    try {
+      let result;
+      if (sourceType === 'camera') {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          setErrorMsg('Camera permission is required to take a profile photo.');
+          setErrorAlertVisible(true);
+          return;
+        }
+        result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ['images'],
+          allowsEditing: true, // Native pan, zoom, scale & crop tool
+          aspect: [4, 5],       // Standard 4:5 portrait dating ratio
+          quality: 0.9,
+        });
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          setErrorMsg('Gallery permission is required to choose a profile photo.');
+          setErrorAlertVisible(true);
+          return;
+        }
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          allowsEditing: true, // Native pan, zoom, scale & crop tool
+          aspect: [4, 5],
+          quality: 0.9,
+        });
+      }
+
+      if (!result.canceled && result.assets && result.assets[0]?.uri) {
+        const croppedUri = result.assets[0].uri;
+        const nextPhotos = [croppedUri, ...allPhotos.filter(p => p !== croppedUri)];
+        const updatedPayload = {
+          avatar: croppedUri,
+          photos: nextPhotos,
+          images: nextPhotos,
+        };
+
+        updateUser(updatedPayload);
+        try {
+          await updateUserProfile(user?.id, updatedPayload);
+        } catch (e) {
+          console.log('Online profile update cached locally:', e);
+        }
+        setSuccessAlertVisible(true);
+      }
+    } catch (e) {
+      console.warn('Photo picker error:', e);
+    }
+  };
 
   const handleOpenEdit = () => {
     setEditName(profileUser.name);
@@ -207,6 +265,16 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
           </View>
+
+          {/* Change Photo Floating Badge */}
+          <TouchableOpacity
+            style={styles.changePhotoBtn}
+            onPress={() => setPhotoPickerVisible(true)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="camera" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+            <Text style={styles.changePhotoTxt}>Change Photo</Text>
+          </TouchableOpacity>
 
           {/* Photo Indicator Dots */}
           {allPhotos.length > 1 && (
@@ -473,6 +541,60 @@ export default function ProfileScreen() {
         confirmText="Got it"
         onConfirm={() => setErrorAlertVisible(false)}
       />
+
+      {/* Photo Picker & Crop Choice Sheet */}
+      <Modal
+        visible={photoPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPhotoPickerVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.pickerBackdrop}
+          activeOpacity={1}
+          onPress={() => setPhotoPickerVisible(false)}
+        >
+          <View style={styles.pickerCard}>
+            <Text style={styles.pickerTitle}>Set Profile Picture</Text>
+            <Text style={styles.pickerSub}>Select an option to choose and crop your photo</Text>
+
+            <TouchableOpacity
+              style={styles.pickerOption}
+              onPress={() => handlePickPhoto('camera')}
+            >
+              <View style={[styles.pickerIconWrap, { backgroundColor: 'rgba(255, 0, 127, 0.12)' }]}>
+                <Ionicons name="camera-outline" size={22} color="#FF007F" />
+              </View>
+              <View style={styles.pickerOptionTxtWrap}>
+                <Text style={styles.pickerOptionTitle}>Take Photo</Text>
+                <Text style={styles.pickerOptionSub}>Use camera & crop picture</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={theme.textFaint} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.pickerOption}
+              onPress={() => handlePickPhoto('gallery')}
+            >
+              <View style={[styles.pickerIconWrap, { backgroundColor: 'rgba(0, 191, 255, 0.12)' }]}>
+                <Ionicons name="images-outline" size={22} color="#00BFFF" />
+              </View>
+              <View style={styles.pickerOptionTxtWrap}>
+                <Text style={styles.pickerOptionTitle}>Choose from Gallery</Text>
+                <Text style={styles.pickerOptionSub}>Select from photos & crop to fit</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={theme.textFaint} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.pickerCancelBtn}
+              onPress={() => setPhotoPickerVisible(false)}
+            >
+              <Text style={styles.pickerCancelTxt}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </LinearGradient>
   );
 }
@@ -480,6 +602,7 @@ export default function ProfileScreen() {
 const getStyles = (theme) => StyleSheet.create({
   flex: { flex: 1 },
   scrollContainer: {
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 12 : 46,
     paddingBottom: 110,
   },
 
@@ -512,6 +635,7 @@ const getStyles = (theme) => StyleSheet.create({
     height: height * 0.44,
     position: 'relative',
     width: '100%',
+    overflow: 'hidden',
   },
   heroImg: {
     position: 'absolute',
@@ -533,11 +657,10 @@ const getStyles = (theme) => StyleSheet.create({
   // Header Nav Bar
   headerBar: {
     position: 'absolute',
-    left: 0, right: 0, top: 0,
+    left: 0, right: 0, top: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 12 : 12,
     zIndex: 35,
   },
   headerRightActions: {
@@ -884,5 +1007,96 @@ const getStyles = (theme) => StyleSheet.create({
     color: '#fff',
     fontSize: 15,
     fontWeight: '900',
+  },
+
+  // Floating Change Photo Button
+  changePhotoBtn: {
+    position: 'absolute',
+    bottom: 22,
+    right: 18,
+    backgroundColor: 'rgba(5, 2, 12, 0.82)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+    zIndex: 40,
+  },
+  changePhotoTxt: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  // Photo Picker Choice Sheet
+  pickerBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(5, 2, 12, 0.85)',
+    justifyContent: 'flex-end',
+  },
+  pickerCard: {
+    backgroundColor: theme.isDark ? '#1C1433' : '#FFFFFF',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: theme.isDark ? 'rgba(255, 255, 255, 0.14)' : 'rgba(0, 0, 0, 0.08)',
+  },
+  pickerTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: theme.textPrimary,
+    letterSpacing: -0.3,
+  },
+  pickerSub: {
+    fontSize: 13,
+    color: theme.textSec,
+    marginTop: 4,
+    marginBottom: 20,
+  },
+  pickerOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 18,
+    backgroundColor: theme.isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.03)',
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  pickerIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  pickerOptionTxtWrap: {
+    flex: 1,
+  },
+  pickerOptionTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: theme.textPrimary,
+  },
+  pickerOptionSub: {
+    fontSize: 12,
+    color: theme.textSec,
+    marginTop: 2,
+  },
+  pickerCancelBtn: {
+    marginTop: 8,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderRadius: 18,
+    backgroundColor: theme.isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
+  },
+  pickerCancelTxt: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: theme.textPrimary,
   },
 });

@@ -43,6 +43,33 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // ──────────────────────────────────────────────────────
+        // 1B. USER ACCOUNT: Prathamesh (prathamesh@gmail.com / 111111)
+        // ──────────────────────────────────────────────────────
+        $prathamesh = User::firstOrCreate(
+            ['email' => 'prathamesh@gmail.com'],
+            [
+                'name'                => 'Prathamesh',
+                'password'            => Hash::make('111111'),
+                'age'                 => 25,
+                'gender'              => 'Male',
+                'bio'                 => 'Passionate tech enthusiast, coffee lover, and explorer looking for meaningful connections.',
+                'job'                 => 'Software Engineer',
+                'avatar'              => 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=500',
+                'city'                => 'Mumbai',
+                'state'               => 'MH',
+                'country'             => 'India',
+                'relationship_type'   => 'Long-term relationship',
+                'compatibility_score' => 98,
+                'interests'           => json_encode(['Coding', 'Travel', 'Music', 'Fitness', 'Coffee']),
+            ]
+        );
+
+        $this->addPhotos($prathamesh->id, [
+            'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=800',
+            'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=800',
+        ]);
+
+        // ──────────────────────────────────────────────────────
         // 2. PRIMARY DEMO FEMALE USER (Anjali — logs in with anjali@heartlink.com)
         //    Will see Male profiles on Discover
         // ──────────────────────────────────────────────────────
@@ -69,6 +96,33 @@ class DatabaseSeeder extends Seeder
             'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=800',
             'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=800',
             'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=800',
+        ]);
+
+        // ──────────────────────────────────────────────────────
+        // 2B. USER ACCOUNT: Anjali (anjali@gmail.com / 111111)
+        // ──────────────────────────────────────────────────────
+        $anjaliG = User::firstOrCreate(
+            ['email' => 'anjali@gmail.com'],
+            [
+                'name'                => 'Anjali',
+                'password'            => Hash::make('111111'),
+                'age'                 => 24,
+                'gender'              => 'Female',
+                'bio'                 => 'Passionate about literature, art, and exploring street food. Looking for someone who matches my vibe.',
+                'job'                 => 'Creative Designer',
+                'avatar'              => 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=500',
+                'city'                => 'Mumbai',
+                'state'               => 'MH',
+                'country'             => 'India',
+                'relationship_type'   => 'Long-term relationship',
+                'compatibility_score' => 95,
+                'interests'           => json_encode(['Literature', 'Art', 'Design', 'Travel', 'Music']),
+            ]
+        );
+
+        $this->addPhotos($anjaliG->id, [
+            'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=800',
+            'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=800',
         ]);
 
         // ──────────────────────────────────────────────────────
@@ -154,6 +208,70 @@ class DatabaseSeeder extends Seeder
                 'photos'              => [
                     'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=800',
                     'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=800',
+                ],
+            ],
+            [
+                'name'                => 'Samirokta Rachin',
+                'email'               => 'samirokta@example.com',
+                'age'                 => 25,
+                'gender'              => 'Female',
+                'job'                 => 'Fashion Model',
+                'city'                => 'Chicago',
+                'state'               => 'IL',
+                'compatibility_score' => 95,
+                'bio'                 => 'Living colorfully, one outfit at a time. Style is a way to say who you are without speaking. Always chasing the next adventure!',
+                'interests'           => ['Fashion', 'Travel', 'Photography', 'Coffee', 'Yoga'],
+                'photos'              => [
+                    'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=800',
+                    'https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=800',
+                ],
+            ],
+            [
+                'name'                => 'Isabella Ross',
+                'email'               => 'isabella@example.com',
+                'age'                 => 24,
+                'gender'              => 'Female',
+                'job'                 => 'Interior Designer',
+                'city'                => 'Chicago',
+                'state'               => 'IL',
+                'compatibility_score' => 90,
+                'bio'                 => 'Creating cozy aesthetic spaces. Lover of houseplants, architectural tours, and artisan bakeries.',
+                'interests'           => ['Interior', 'Design', 'Architecture', 'Bakeries', 'Plants'],
+                'photos'              => [
+                    'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=800',
+                    'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=800',
+                ],
+            ],
+            [
+                'name'                => 'Chloe Bennett',
+                'email'               => 'chloe@example.com',
+                'age'                 => 23,
+                'gender'              => 'Female',
+                'job'                 => 'Event Strategist',
+                'city'                => 'Chicago',
+                'state'               => 'IL',
+                'compatibility_score' => 93,
+                'bio'                 => 'Festival goer, live music enthusiast, and lover of warm sunsets and beach volleyball.',
+                'interests'           => ['Concerts', 'Volleyball', 'Sunsets', 'Music', 'Festivals'],
+                'photos'              => [
+                    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800',
+                    'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=800',
+                ],
+            ],
+            [
+                'name'                => 'Emma Watson',
+                'email'               => 'emma@example.com',
+                'age'                 => 25,
+                'gender'              => 'Female',
+                'job'                 => 'Environmental Scientist',
+                'city'                => 'Chicago',
+                'state'               => 'IL',
+                'compatibility_score' => 96,
+                'bio'                 => 'Exploring nature trails, reading classic novels, and sipping chai on rainy afternoons.',
+                'interests'           => ['Nature', 'Books', 'Chai', 'Hiking', 'Science'],
+                'photos'              => [
+                    'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=800',
+                    'https://images.unsplash.com/photo-1530268729831-4b0b9e170218?w=800',
                 ],
             ],
         ];

@@ -27,9 +27,13 @@ export default function CustomAlertModal({
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel || onConfirm}>
       <View style={styles.backdrop}>
-        <View style={[styles.card, { borderColor: theme.border }]}>
-          <BlurView intensity={isDark ? 85 : 95} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
-
+        <View style={[
+          styles.card,
+          {
+            backgroundColor: isDark ? '#1C1433' : '#FFFFFF',
+            borderColor: isDark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(0, 0, 0, 0.08)',
+          }
+        ]}>
           <View style={[
             styles.iconCircle,
             { backgroundColor: isDanger ? 'rgba(255, 55, 95, 0.15)' : 'rgba(255, 0, 127, 0.15)', borderColor: iconColor }
@@ -69,7 +73,7 @@ export default function CustomAlertModal({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(5, 2, 12, 0.85)',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 24,

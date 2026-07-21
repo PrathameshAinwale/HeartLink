@@ -14,13 +14,12 @@ class DiscoverController extends Controller
     {
         $user = $request->user();
 
-        // Only exclude profiles that the CURRENT USER actively swiped on.
-        // We intentionally do NOT exclude profiles that swiped on the current user
-        // (those show up in Requests; declining them should not remove from Discover).
+        // 1. Exclude ALL profiles that the CURRENT USER actively swiped on (whether like, pass, or super_like)
+        // so that once you swipe on a profile, they never appear again in Discover feed!
         $swipedByMeIds = Swipe::where('swiper_id', $user->id)
             ->pluck('swiped_user_id');
 
-        // Also exclude users already matched with
+        // 2. Exclude users already matched with
         $matchedIds = \App\Models\UserMatch::where('user_1_id', $user->id)
             ->orWhere('user_2_id', $user->id)
             ->get()
@@ -28,12 +27,18 @@ class DiscoverController extends Controller
             ->filter(fn($id) => $id !== $user->id)
             ->unique();
 
-        $excludeIds = $swipedByMeIds->merge($matchedIds)->unique();
+        // 3. Exclude ONLY explicitly blocked users (from UserBlock table)
+        $blockedIds = \App\Models\UserBlock::where('blocker_id', $user->id)
+            ->pluck('blocked_user_id');
+
+        $excludeIds = $swipedByMeIds->merge($matchedIds)->merge($blockedIds)->unique();
 
         $query = User::where('id', '!=', $user->id)
             ->whereNotIn('id', $excludeIds);
 
-        // Opposite gender filtering: Male/Man -> Female/Woman, Female/Woman -> Male/Man
+        // Enforce strict opposite gender filtering:
+        // Male/Man -> Female/Woman only
+        // Female/Woman -> Male/Man only
         $userGender = strtolower($user->gender ?? 'male');
         if (in_array($userGender, ['male', 'man'])) {
             $query->whereIn(\Illuminate\Support\Facades\DB::raw('LOWER(gender)'), ['female', 'woman']);
@@ -41,10 +46,7 @@ class DiscoverController extends Controller
             $query->whereIn(\Illuminate\Support\Facades\DB::raw('LOWER(gender)'), ['male', 'man']);
         }
 
-        $profiles = $query->with('photos')
-            ->orderBy('id', 'desc')
-            ->limit(20)
-            ->get();
+        $profiles = $query->with('photos')->orderBy('id', 'desc')->get();
 
         return response()->json([
             'profiles' => $profiles,

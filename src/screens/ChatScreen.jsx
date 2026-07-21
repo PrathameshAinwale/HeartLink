@@ -15,10 +15,10 @@ const { width, height } = Dimensions.get('window');
 
 export default function ChatScreen() {
   const navigation = useNavigation();
-  const [search, setSearch]         = useState('');
+  const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
-  const [chats, setChats]           = useState([]);
-  
+  const [chats, setChats] = useState([]);
+
   const { theme, isDark } = useTheme();
   const styles = useMemo(() => getStyles(theme), [theme]);
 
@@ -35,7 +35,11 @@ export default function ChatScreen() {
           lastMsg: c.last_msg || 'Matched! Start chatting now.',
           image: c.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400',
           user: c.user,
+          lastTimestamp: c.last_timestamp || 0,
         }));
+
+        // Sort descending so the most recent messaged user appears at the top
+        apiList.sort((a, b) => (b.lastTimestamp || 0) - (a.lastTimestamp || 0));
         setChats(apiList);
       }
     } catch (e) {
@@ -45,13 +49,10 @@ export default function ChatScreen() {
 
   useEffect(() => {
     fetchConversations();
+    const interval = setInterval(fetchConversations, 6000); // 6s polling only when screen is active
     const unsubscribe = navigation.addListener('focus', () => {
       fetchConversations();
     });
-
-    const interval = setInterval(() => {
-      fetchConversations();
-    }, 3000);
 
     return () => {
       unsubscribe();
@@ -68,13 +69,6 @@ export default function ChatScreen() {
       onPress={() => navigation.navigate('ChatDetail', { userId: item.id, user: item.user })}
       activeOpacity={0.80}
     >
-      {/* Frosted Glass Background */}
-      <BlurView
-        intensity={isDark ? 40 : 60}
-        tint={isDark ? "dark" : "light"}
-        style={StyleSheet.absoluteFill}
-      />
-
       {/* Avatar */}
       <View style={styles.avatarWrap}>
         <Image source={{ uri: item.image }} style={styles.avatar} />
@@ -201,7 +195,7 @@ const getStyles = (theme) => StyleSheet.create({
     paddingBottom: 12,
     zIndex: 10,
   },
-  title:  { fontSize: 28, fontWeight: '900', color: theme.textPrimary, letterSpacing: -0.6 },
+  title: { fontSize: 28, fontWeight: '900', color: theme.textPrimary, letterSpacing: -0.6 },
   headerRight: { flexDirection: 'row', gap: 8 },
   iconBtn: {
     width: 40, height: 40, borderRadius: 20,
@@ -216,8 +210,8 @@ const getStyles = (theme) => StyleSheet.create({
     borderWidth: 1, borderColor: theme.border,
   },
   searchInput: { flex: 1, color: theme.textPrimary, fontSize: 14, padding: 0 },
-  list:        { paddingHorizontal: 16, paddingBottom: 110 },
-  sectionLabel:{ fontSize: 11, fontWeight: '800', color: theme.textFaint, letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 12, paddingLeft: 4 },
+  list: { paddingHorizontal: 16, paddingBottom: 110 },
+  sectionLabel: { fontSize: 11, fontWeight: '800', color: theme.textFaint, letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 12, paddingLeft: 4 },
 
   // Active Connection carousel
   sparksSection: {
@@ -268,33 +262,33 @@ const getStyles = (theme) => StyleSheet.create({
     textAlign: 'center',
   },
 
-  // Chat conversation rows (Frosted cardStrips)
+  // Chat conversation rows (Solid cardStrips)
   chatCard: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: theme.glass,
+    backgroundColor: theme.isDark ? '#191130' : '#FFFFFF',
     borderRadius: 22, padding: 14, marginBottom: 8,
-    borderWidth: 1, borderColor: theme.border,
+    borderWidth: 1, borderColor: theme.isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.08)',
     overflow: 'hidden',
   },
   avatarWrap: { position: 'relative', marginRight: 14 },
-  avatar:     { width: 54, height: 54, borderRadius: 27 },
-  onlineDot:  {
+  avatar: { width: 54, height: 54, borderRadius: 27 },
+  onlineDot: {
     position: 'absolute', bottom: 1, right: 1,
     width: 13, height: 13, borderRadius: 6.5,
     backgroundColor: theme.accentGreen, borderWidth: 2, borderColor: '#150A2E',
   },
-  chatInfo:   { flex: 1 },
-  chatRow:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  chatName:   { fontSize: 15, fontWeight: '800', color: theme.textPrimary, letterSpacing: -0.2 },
-  chatTime:   { fontSize: 11, color: theme.textFaint },
-  chatMsg:    { fontSize: 13, color: theme.textSec, flex: 1, paddingRight: 10 },
-  unreadBadge:{ minWidth: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 5 },
+  chatInfo: { flex: 1 },
+  chatRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  chatName: { fontSize: 15, fontWeight: '800', color: theme.textPrimary, letterSpacing: -0.2 },
+  chatTime: { fontSize: 11, color: theme.textFaint },
+  chatMsg: { fontSize: 13, color: theme.textSec, flex: 1, paddingRight: 10 },
+  unreadBadge: { minWidth: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 5 },
   unreadText: { color: '#fff', fontSize: 10, fontWeight: '900' },
-  empty:      { alignItems: 'center', paddingTop: 60, gap: 12 },
-  emptyText:  { color: theme.textSec, fontSize: 15 },
+  empty: { alignItems: 'center', paddingTop: 60, gap: 12 },
+  emptyText: { color: theme.textSec, fontSize: 15 },
 
   // Premium empty state (matches RequestsScreen pattern)
-  emptyWrap:  { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30, paddingTop: 60 },
+  emptyWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30, paddingTop: 60 },
   emptyCard: {
     backgroundColor: theme.glass, borderRadius: 24, padding: 32,
     alignItems: 'center', gap: 12,
@@ -304,5 +298,5 @@ const getStyles = (theme) => StyleSheet.create({
     shadowRadius: 8,
   },
   emptyTitle: { fontSize: 20, fontWeight: '800', color: theme.textPrimary },
-  emptySub:   { fontSize: 14, color: theme.textSec, textAlign: 'center', lineHeight: 21 },
+  emptySub: { fontSize: 14, color: theme.textSec, textAlign: 'center', lineHeight: 21 },
 });

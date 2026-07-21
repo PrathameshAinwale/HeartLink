@@ -78,18 +78,24 @@ class ChatController extends Controller
                 ->where('is_read', false)
                 ->count();
 
+            $isMe = $lastMsg ? ($lastMsg->sender_id === $authId) : false;
+            $msgText = $lastMsg ? ($isMe ? 'You: ' . $lastMsg->message : $lastMsg->message) : 'Matched! Start chatting now.';
+
             return [
-                'id'           => $otherUser->id,
-                'match_id'     => $match->id,
-                'name'         => $otherUser->name,
-                'avatar'       => $otherUser->avatar ?: ($otherUser->photos->first()->photo_url ?? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400'),
-                'online'       => (bool) $otherUser->is_online,
-                'last_msg'     => $lastMsg ? $lastMsg->message : 'Matched! Start chatting now.',
-                'last_time'    => $lastMsg ? $lastMsg->created_at->diffForHumans() : 'Just now',
-                'unread_count' => $unreadCount,
-                'user'         => $otherUser,
+                'id'             => $otherUser->id,
+                'match_id'       => $match->id,
+                'name'           => $otherUser->name,
+                'avatar'         => $otherUser->avatar ?: ($otherUser->photos->first()->photo_url ?? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400'),
+                'online'         => (bool) $otherUser->is_online,
+                'last_msg'       => $msgText,
+                'last_time'      => $lastMsg ? $lastMsg->created_at->diffForHumans() : 'Just now',
+                'last_timestamp' => $lastMsg ? $lastMsg->created_at->timestamp : ($match->created_at ? $match->created_at->timestamp : 0),
+                'last_sender_id' => $lastMsg ? $lastMsg->sender_id : null,
+                'is_me'          => $isMe,
+                'unread_count'   => $unreadCount,
+                'user'           => $otherUser,
             ];
-        })->filter()->values();
+        })->filter()->sortByDesc('last_timestamp')->values();
 
         return response()->json([
             'conversations' => $conversations,

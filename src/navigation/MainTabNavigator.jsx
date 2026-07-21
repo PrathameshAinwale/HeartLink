@@ -1,5 +1,5 @@
 // src/navigation/MainTabNavigator.jsx
-import React, { useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +10,7 @@ import DatePlannerScreen from '../screens/DatePlannerScreen';
 import VibesScreen       from '../screens/VibesScreen';
 import ChatScreen        from '../screens/ChatScreen';
 import { useTheme } from '../theme/ThemeContext';
+import { apiGetRequests, apiGetConversations } from '../services/api';
 
 const { width } = Dimensions.get('window');
 const TAB_BAR_WIDTH = width - 32; // left: 16, right: 16
@@ -36,6 +37,34 @@ function CustomTabBar({ state, descriptors, navigation }) {
   const { isDark, theme } = useTheme();
   const styles = useMemo(() => getStyles(theme), [theme]);
   const slideAnim = useRef(new Animated.Value(state.index * TAB_WIDTH + INDICATOR_OFFSET)).current;
+
+  const [requestCount, setRequestCount] = useState(0);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  const fetchBadgeCounts = async () => {
+    try {
+      const [reqRes, chatRes] = await Promise.all([
+        apiGetRequests().catch(() => null),
+        apiGetConversations().catch(() => null),
+      ]);
+
+      if (reqRes?.requests && Array.isArray(reqRes.requests)) {
+        setRequestCount(reqRes.requests.length);
+      }
+      if (chatRes?.conversations && Array.isArray(chatRes.conversations)) {
+        const totalUnread = chatRes.conversations.reduce((sum, c) => sum + (c.unread_count || 0), 0);
+        setUnreadCount(totalUnread);
+      }
+    } catch (e) {
+      // ignore transient polling errors
+    }
+  };
+
+  useEffect(() => {
+    fetchBadgeCounts();
+    const interval = setInterval(fetchBadgeCounts, 12000); // Relaxed 12s interval
+    return () => clearInterval(interval);
+  }, [state.index]);
 
   useEffect(() => {
     Animated.spring(slideAnim, {
@@ -91,6 +120,8 @@ function CustomTabBar({ state, descriptors, navigation }) {
           ? (isDark ? '#fff' : '#0D0F1A') 
           : (isDark ? 'rgba(255,255,255,0.40)' : 'rgba(0,0,0,0.35)');
 
+        const badgeNum = route.name === 'Matches' ? requestCount : (route.name === 'Chat' ? unreadCount : 0);
+
         return (
           <TouchableOpacity
             key={route.key}
@@ -109,6 +140,11 @@ function CustomTabBar({ state, descriptors, navigation }) {
                 size={18}
                 color={iconColor}
               />
+              {badgeNum > 0 && (
+                <View style={styles.badgePill}>
+                  <Text style={styles.badgeText}>{badgeNum > 99 ? '99+' : badgeNum}</Text>
+                </View>
+              )}
             </View>
             <Text style={[styles.tabLabel, { color: labelColor }]}>
               {route.name}
@@ -180,7 +216,6 @@ const getStyles = (theme) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
-    overflow: 'hidden',
   },
   iconContainerActive: {
     backgroundColor: theme.isDark ? '#fff' : '#0D0F1A',
@@ -191,22 +226,20 @@ const getStyles = (theme) => StyleSheet.create({
     marginTop: 2,
     letterSpacing: 0.2,
   },
-  badge: {
+  badgePill: {
     position: 'absolute',
-    top: -3,
-    right: -3,
-    backgroundColor: '#FF375F',
+    top: 0,
+    right: 0,
+    backgroundColor: '#FF007F',
     borderRadius: 8,
-    minWidth: 15,
-    height: 15,
+    minWidth: 16,
+    height: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 2,
+    paddingHorizontal: 3,
     borderWidth: 1.5,
-    borderColor: theme.isDark ? 'rgba(14,14,20,0.85)' : '#fff',
-  },
-  badgeActive: {
-    borderColor: theme.isDark ? '#fff' : '#0D0F1A', // Match circular background when active
+    borderColor: theme.isDark ? '#0D0F1A' : '#FFFFFF',
+    zIndex: 99,
   },
   badgeText: {
     color: '#fff',

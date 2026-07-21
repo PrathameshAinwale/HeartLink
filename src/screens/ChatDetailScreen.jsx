@@ -1,4 +1,3 @@
-// src/screens/ChatDetailScreen.jsx
 import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import {
   View,
@@ -16,14 +15,14 @@ import {
   Animated,
   ScrollView,
   ActivityIndicator,
+  Keyboard,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
-import { ensureArray } from '../utils/helpers';
+import ProfileDetail from '../components/discovery/ProfileDetail';
 import {
   apiSendMessage,
   apiBlockUser,
@@ -84,7 +83,6 @@ const SAMPLE_MESSAGES = [
   },
 ];
 
-
 export default function ChatDetailScreen() {
   const navigation = useNavigation();
   const route = useRoute();
@@ -105,11 +103,12 @@ export default function ChatDetailScreen() {
   const toastAnim = useRef(new Animated.Value(0)).current;
 
   const listRef = useRef(null);
+  const inputRef = useRef(null);
   const { theme, isDark } = useTheme();
   const styles = useMemo(() => getStyles(theme), [theme]);
 
-  // Adjust user details based on route params if passed
-  const activeUser = useMemo(() => {
+  // Dynamic state for active chat recipient user details
+  const [activeUser, setActiveUser] = useState(() => {
     if (route.params?.user) {
       return { ...DEFAULT_USER, ...route.params.user };
     }
@@ -121,6 +120,14 @@ export default function ChatDetailScreen() {
       };
     }
     return DEFAULT_USER;
+  });
+
+  useEffect(() => {
+    if (route.params?.user) {
+      setActiveUser(prev => ({ ...prev, ...route.params.user }));
+    } else if (route.params?.name) {
+      setActiveUser(prev => ({ ...prev, name: route.params.name, image: route.params.image || prev.image }));
+    }
   }, [route.params]);
 
   const [isOtherTyping, setIsOtherTyping] = useState(false);
@@ -176,6 +183,17 @@ export default function ChatDetailScreen() {
         setIsBlocked(true);
       }
 
+      // Dynamically update recipient user details if returned by server
+      const recipientObj = response?.user || response?.recipient || response?.other_user;
+      if (recipientObj && recipientObj.name) {
+        setActiveUser(prev => ({
+          ...prev,
+          name: recipientObj.name || prev.name,
+          image: recipientObj.avatar || recipientObj.image || prev.image,
+          online: recipientObj.online !== undefined ? recipientObj.online : prev.online,
+        }));
+      }
+
       let messagesData = [];
       if (response && response.data) messagesData = response.data;
       else if (response && response.messages) messagesData = response.messages;
@@ -194,13 +212,15 @@ export default function ChatDetailScreen() {
         }));
 
         setMessages((prev) => {
-          // If lengths differ or last message ID differs, update and auto-scroll
           if (
             prev.length !== formatted.length ||
             (formatted.length > 0 && prev[prev.length - 1]?.id !== formatted[formatted.length - 1]?.id) ||
             JSON.stringify(prev.map(p => p.isRead)) !== JSON.stringify(formatted.map(f => f.isRead))
           ) {
-            setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 120);
+            // Only auto-scroll on updates if the user is not actively typing
+            if (isFirst) {
+              setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 120);
+            }
             return formatted;
           }
           return prev;
@@ -219,15 +239,33 @@ export default function ChatDetailScreen() {
     }
   }, [targetId]);
 
-  // Auto-polling interval every 2 seconds for real-time messaging
+  // Auto-polling interval every 2.5s for real-time messaging only when chat is active
   useEffect(() => {
     fetchHistory(true);
     const interval = setInterval(() => {
       fetchHistory(false);
-    }, 2000);
+    }, 2500);
 
     return () => clearInterval(interval);
   }, [fetchHistory]);
+
+  // Auto scroll to latest message when keyboard pops up or closes
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, () => {
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: false }), 50);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   // Custom Toast Trigger
   const triggerCustomToast = (msg) => {
@@ -267,12 +305,19 @@ export default function ChatDetailScreen() {
 
     setMessages((p) => [...p, newMessage]);
     setInput('');
-    setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80);
+    
+    // Maintain keyboard focus continuously and perform double scroll passes
+    setTimeout(() => {
+      inputRef.current?.focus();
+      listRef.current?.scrollToEnd({ animated: true });
+    }, 50);
+    setTimeout(() => {
+      listRef.current?.scrollToEnd({ animated: true });
+    }, 200);
 
     if (targetId) {
       try {
         await apiSendMessage(targetId, textToSend);
-        // Immediate re-fetch after send
         fetchHistory(false);
       } catch (error) {
         console.log('Error sending message:', error);
@@ -351,11 +396,6 @@ export default function ChatDetailScreen() {
           </LinearGradient>
         ) : (
           <View style={[styles.bubble, styles.bubbleOther]}>
-            <BlurView
-              intensity={isDark ? 30 : 50}
-              tint={isDark ? 'dark' : 'light'}
-              style={StyleSheet.absoluteFill}
-            />
             <Text style={styles.bubbleTextOther}>{item.text}</Text>
             <Text style={styles.bubbleTimeOther}>{item.time}</Text>
           </View>
@@ -395,11 +435,6 @@ export default function ChatDetailScreen() {
 
       {/* Header */}
       <View style={styles.headerContainer}>
-        <BlurView
-          intensity={isDark ? 45 : 75}
-          tint={isDark ? 'dark' : 'light'}
-          style={StyleSheet.absoluteFill}
-        />
         <SafeAreaView edges={['top']} style={styles.headerSafeArea}>
           <View style={styles.header}>
             <TouchableOpacity
@@ -460,12 +495,6 @@ export default function ChatDetailScreen() {
           onPress={() => setShowMenu(false)}
         >
           <View style={styles.dropdownCard}>
-            <BlurView
-              intensity={isDark ? 80 : 95}
-              tint={isDark ? 'dark' : 'light'}
-              style={StyleSheet.absoluteFill}
-            />
-
             <TouchableOpacity
               style={styles.dropdownOption}
               onPress={() => {
@@ -511,7 +540,6 @@ export default function ChatDetailScreen() {
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
         {/* Messages log */}
         <View style={styles.messagesArea}>
@@ -522,9 +550,7 @@ export default function ChatDetailScreen() {
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.msgList}
             showsVerticalScrollIndicator={false}
-            onContentSizeChange={() => {
-              listRef.current?.scrollToEnd({ animated: true });
-            }}
+            keyboardShouldPersistTaps="handled"
             ListFooterComponent={
               isOtherTyping ? (
                 <View style={[styles.msgRow, { marginBottom: 6 }]}>
@@ -532,7 +558,6 @@ export default function ChatDetailScreen() {
                     <Image source={{ uri: activeUser.image }} style={styles.msgAvatar} />
                   </TouchableOpacity>
                   <View style={[styles.bubble, styles.bubbleOther, styles.typingBubble]}>
-                    <BlurView intensity={isDark ? 30 : 50} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
                     <View style={styles.typingDotsRow}>
                       <Animated.View style={[styles.typingDot, { opacity: typingDot1 }]} />
                       <Animated.View style={[styles.typingDot, { opacity: typingDot2 }]} />
@@ -547,11 +572,6 @@ export default function ChatDetailScreen() {
 
         {/* Input deck or Blocked Banner */}
         <View style={styles.inputContainer}>
-          <BlurView
-            intensity={isDark ? 45 : 75}
-            tint={isDark ? 'dark' : 'light'}
-            style={StyleSheet.absoluteFill}
-          />
           <SafeAreaView edges={['bottom']} style={styles.inputSafeArea}>
             {isBlocked ? (
               <View style={styles.blockedBannerRow}>
@@ -566,13 +586,13 @@ export default function ChatDetailScreen() {
               <View style={styles.inputRow}>
                 <View style={styles.inputWrap}>
                   <TextInput
+                    ref={inputRef}
                     style={styles.input}
                     placeholder="Type message…"
                     placeholderTextColor={theme.textFaint}
                     value={input}
                     onChangeText={setInput}
                     multiline
-                    editable={!isSending}
                   />
                 </View>
 
@@ -598,71 +618,13 @@ export default function ChatDetailScreen() {
         </View>
       </KeyboardAvoidingView>
 
-      {/* Custom User Profile Modal */}
-      <Modal
+      {/* Profile Detail Modal (Matches & Requests style popup) */}
+      <ProfileDetail
         visible={showProfileModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowProfileModal(false)}
-      >
-        <View style={styles.profileModalContainer}>
-          <BlurView
-            intensity={isDark ? 90 : 98}
-            tint={isDark ? 'dark' : 'light'}
-            style={StyleSheet.absoluteFill}
-          />
-
-          <TouchableOpacity
-            style={styles.profileModalCloseBtn}
-            onPress={() => setShowProfileModal(false)}
-            activeOpacity={0.8}
-          >
-            <View style={styles.profileCloseCircle}>
-              <Ionicons name="close" size={22} color={theme.textPrimary} />
-            </View>
-          </TouchableOpacity>
-
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.profileModalContent}
-          >
-            <Image source={{ uri: activeUser.image }} style={styles.profileModalPhoto} />
-
-            <View style={styles.profileModalBody}>
-              <View style={styles.profileNameRow}>
-                <Text style={styles.profileModalName}>
-                  {activeUser.name}, {activeUser.age}
-                </Text>
-                <View style={styles.profileCompatBadge}>
-                  <Text style={styles.profileCompatNum}>
-                    {activeUser.compatibility || 85}% Match
-                  </Text>
-                </View>
-              </View>
-
-              <Text style={styles.profileModalJob}>
-                {activeUser.job} · {activeUser.distance || 'Nearby'}
-              </Text>
-
-              <View style={styles.profileSectionCard}>
-                <Text style={styles.profileSectionTitle}>ABOUT</Text>
-                <Text style={styles.profileBioText}>{activeUser.bio}</Text>
-              </View>
-
-              <View style={styles.profileSectionCard}>
-                <Text style={styles.profileSectionTitle}>INTERESTS</Text>
-                <View style={styles.profileTagsRow}>
-                  {ensureArray(activeUser.interests, ['Travel', 'Music', 'Photography']).map((item, idx) => (
-                    <View key={idx} style={styles.profileTag}>
-                      <Text style={styles.profileTagTxt}>{item}</Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            </View>
-          </ScrollView>
-        </View>
-      </Modal>
+        profile={activeUser}
+        onClose={() => setShowProfileModal(false)}
+        isMatch={true}
+      />
 
       {/* Custom Block Confirmation Modal */}
       <Modal
@@ -673,11 +635,6 @@ export default function ChatDetailScreen() {
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.customAlertCard}>
-            <BlurView
-              intensity={isDark ? 85 : 95}
-              tint={isDark ? 'dark' : 'light'}
-              style={StyleSheet.absoluteFill}
-            />
             <View style={styles.alertIconCircleDanger}>
               <Ionicons name="ban" size={30} color="#FF375F" />
             </View>
@@ -717,11 +674,6 @@ export default function ChatDetailScreen() {
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.customReportCard}>
-            <BlurView
-              intensity={isDark ? 85 : 95}
-              tint={isDark ? 'dark' : 'light'}
-              style={StyleSheet.absoluteFill}
-            />
             <View style={styles.alertIconCircleWarning}>
               <Ionicons name="flag" size={26} color="#FF9500" />
             </View>
@@ -801,11 +753,6 @@ export default function ChatDetailScreen() {
           ]}
           pointerEvents="none"
         >
-          <BlurView
-            intensity={isDark ? 85 : 95}
-            tint={isDark ? 'dark' : 'light'}
-            style={StyleSheet.absoluteFill}
-          />
           <Ionicons name="checkmark-circle" size={22} color="#30D158" />
           <Text style={styles.customToastTxt}>{toastText}</Text>
         </Animated.View>
@@ -836,8 +783,8 @@ const getStyles = (theme) =>
       width: 220,
       height: 220,
       borderRadius: 110,
-      backgroundColor: 'rgba(0, 191, 255, 0.16)',
-      opacity: 0.7,
+      backgroundColor: 'rgba(0, 191, 255, 0.12)',
+      opacity: theme.isDark ? 0.35 : 0.04,
       zIndex: 0,
     },
     glowBlobFuchsia: {
@@ -847,15 +794,16 @@ const getStyles = (theme) =>
       width: 240,
       height: 240,
       borderRadius: 120,
-      backgroundColor: 'rgba(255, 0, 127, 0.18)',
-      opacity: 0.8,
+      backgroundColor: 'rgba(255, 0, 127, 0.12)',
+      opacity: theme.isDark ? 0.4 : 0.04,
       zIndex: 0,
     },
 
     // Header
     headerContainer: {
+      backgroundColor: theme.isDark ? '#160F2B' : '#FFFFFF',
       borderBottomWidth: 1,
-      borderBottomColor: theme.border,
+      borderBottomColor: theme.isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
       overflow: 'hidden',
       zIndex: 10,
     },
@@ -874,7 +822,7 @@ const getStyles = (theme) =>
       width: 38,
       height: 38,
       borderRadius: 19,
-      backgroundColor: theme.glass,
+      backgroundColor: theme.isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
       borderWidth: 1,
       borderColor: theme.border,
       justifyContent: 'center',
@@ -907,7 +855,7 @@ const getStyles = (theme) =>
       width: 38,
       height: 38,
       borderRadius: 19,
-      backgroundColor: theme.glass,
+      backgroundColor: theme.isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
       borderWidth: 1,
       borderColor: theme.border,
       justifyContent: 'center',
@@ -930,8 +878,9 @@ const getStyles = (theme) =>
       width: 170,
       borderRadius: 18,
       overflow: 'hidden',
+      backgroundColor: theme.isDark ? '#1D1338' : '#FFFFFF',
       borderWidth: 1,
-      borderColor: theme.border,
+      borderColor: theme.isDark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(0, 0, 0, 0.08)',
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 8 },
       shadowOpacity: 0.35,
@@ -957,7 +906,7 @@ const getStyles = (theme) =>
 
     // Messages log
     messagesArea: { flex: 1 },
-    msgList: { paddingHorizontal: 16, paddingTop: 18, paddingBottom: 24, gap: 10 },
+    msgList: { paddingHorizontal: 16, paddingTop: 18, paddingBottom: 16, gap: 10 },
     msgRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
     msgRowMe: { flexDirection: 'row-reverse' },
     msgAvatar: { width: 30, height: 30, borderRadius: 15, marginBottom: 2 },
@@ -970,10 +919,10 @@ const getStyles = (theme) =>
       overflow: 'hidden',
     },
     bubbleOther: {
-      backgroundColor: theme.glass,
+      backgroundColor: theme.isDark ? '#261C44' : '#EAE7F6',
       borderBottomLeftRadius: 4,
       borderWidth: 1,
-      borderColor: theme.border,
+      borderColor: theme.isDark ? 'rgba(255, 255, 255, 0.14)' : 'rgba(0, 0, 0, 0.06)',
     },
     bubbleMe: {
       borderBottomRightRadius: 4,
@@ -995,8 +944,9 @@ const getStyles = (theme) =>
 
     // Input deck
     inputContainer: {
+      backgroundColor: theme.isDark ? '#160F2B' : '#FFFFFF',
       borderTopWidth: 1,
-      borderTopColor: theme.border,
+      borderTopColor: theme.isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
       overflow: 'hidden',
     },
     inputSafeArea: {
@@ -1011,10 +961,10 @@ const getStyles = (theme) =>
     },
     inputWrap: {
       flex: 1,
-      backgroundColor: theme.glass,
+      backgroundColor: theme.isDark ? '#231B3D' : '#F4F2FA',
       borderRadius: 24,
       borderWidth: 1,
-      borderColor: theme.border,
+      borderColor: theme.isDark ? 'rgba(255, 255, 255, 0.14)' : 'rgba(0, 0, 0, 0.08)',
       paddingHorizontal: 16,
       paddingVertical: 4,
       maxHeight: 110,
@@ -1043,7 +993,7 @@ const getStyles = (theme) =>
     // Modal Backdrop & Cards
     modalBackdrop: {
       flex: 1,
-      backgroundColor: 'rgba(0, 0, 0, 0.70)',
+      backgroundColor: 'rgba(5, 2, 12, 0.88)',
       justifyContent: 'center',
       alignItems: 'center',
       paddingHorizontal: 24,
@@ -1053,8 +1003,9 @@ const getStyles = (theme) =>
       borderRadius: 28,
       padding: 24,
       alignItems: 'center',
+      backgroundColor: theme.isDark ? '#1C1433' : '#FFFFFF',
       borderWidth: 1,
-      borderColor: theme.border,
+      borderColor: theme.isDark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(0, 0, 0, 0.08)',
       overflow: 'hidden',
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 10 },
@@ -1067,8 +1018,9 @@ const getStyles = (theme) =>
       borderRadius: 28,
       padding: 24,
       alignItems: 'center',
+      backgroundColor: theme.isDark ? '#1C1433' : '#FFFFFF',
       borderWidth: 1,
-      borderColor: theme.border,
+      borderColor: theme.isDark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(0, 0, 0, 0.08)',
       overflow: 'hidden',
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 10 },
@@ -1300,6 +1252,7 @@ const getStyles = (theme) =>
       left: 20,
       right: 20,
       borderRadius: 24,
+      backgroundColor: theme.isDark ? '#1C1433' : '#FFFFFF',
       paddingHorizontal: 18,
       paddingVertical: 14,
       flexDirection: 'row',

@@ -2,15 +2,41 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Multi-host fallback supporting Physical Devices (192.168.1.38), Android Emulators (10.0.2.2), and Web/iOS (localhost)
-const HOSTS = [
-  'http://192.168.1.38:8000/api/v1',
-  'http://10.0.2.2:8000/api/v1',
-  'http://localhost:8000/api/v1',
-];
+import Constants from 'expo-constants';
 
 const TOKEN_STORAGE_KEY = '@heartlink_token_session';
 let userToken = null;
+let activeWorkingHost = null;
+
+const getHostCandidates = () => {
+  const hosts = [];
+
+  // If we already know a working host from previous successful requests, try it first
+  if (activeWorkingHost) {
+    hosts.push(activeWorkingHost);
+  }
+
+  // 1. Dynamic host IP provided by Expo CLI (resolves exact PC IP for LAN/physical phone/emulator)
+  const hostUri = Constants.expoConfig?.hostUri || Constants.manifest?.debuggerHost;
+  if (hostUri) {
+    const ip = hostUri.split(':')[0];
+    if (ip && ip !== 'localhost' && ip !== '127.0.0.1') {
+      hosts.push(`http://${ip}:8000/api/v1`);
+    }
+  }
+
+  // 2. Android Emulator standard loopback
+  if (Platform.OS === 'android') {
+    hosts.push('http://10.0.2.2:8000/api/v1');
+  }
+
+  // 3. Fallbacks
+  hosts.push('http://127.0.0.1:8000/api/v1');
+  hosts.push('http://localhost:8000/api/v1');
+
+  // Deduplicate array preserving order
+  return Array.from(new Set(hosts));
+};
 
 export const setAuthToken = (token) => {
   userToken = token;
@@ -18,8 +44,7 @@ export const setAuthToken = (token) => {
 
 export const getAuthToken = () => userToken;
 
-// Eagerly load the token from storage once on startup (covers the race between
-// restoreSession and the first API call from a screen's useEffect)
+// Eagerly load the token from storage once on startup
 const _preloadToken = async () => {
   try {
     const saved = await AsyncStorage.getItem(TOKEN_STORAGE_KEY);
@@ -47,20 +72,26 @@ export const apiFetch = async (endpoint, options = {}) => {
     config.body = JSON.stringify(options.body);
   }
 
+  const hosts = getHostCandidates();
   let lastError = null;
-  for (const host of HOSTS) {
+
+  for (const host of hosts) {
     try {
       const response = await fetch(`${host}${endpoint}`, config);
       const data = await response.json();
 
       if (!response.ok) {
+        // Successful network connection to host, even if server returned HTTP error status
+        activeWorkingHost = host;
         throw new Error(data.message || 'API request failed');
       }
 
+      // Record successful host for subsequent fast requests
+      activeWorkingHost = host;
       return data;
     } catch (error) {
       lastError = error;
-      // If it's a server response error (e.g. 400/422 validation), don't retry other hosts
+      // If server responded with status code / application error, don't attempt other hosts
       if (error.message && !error.message.includes('fetch failed') && !error.message.includes('Network request failed') && !error.message.includes('ConnectException')) {
         throw error;
       }

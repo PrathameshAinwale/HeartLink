@@ -119,19 +119,25 @@ export default function ProfileDetail({ visible, profile, onClose, onLike, onPas
           </View>
         </ScrollView>
 
-        {/* Floating bottom glass action panel */}
-        <View style={styles.bottomBar}>
-          <TouchableOpacity style={styles.btnPass} onPress={() => { onPass(profile.id); onClose(); }}>
-            <Text style={styles.btnPassText}>{isMatch ? "Unmatch" : "Pass"}</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={styles.btnLike} onPress={() => { onLike(profile.id); onClose(); }}>
-            <LinearGradient colors={theme.gradientAccent} style={styles.btnLikeGrad}>
-              <Ionicons name={isMatch ? "chatbubble-ellipses-outline" : "heart"} size={20} color="#fff" />
-              <Text style={styles.btnLikeText}>{isMatch ? "Message" : "Accept Match"}</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
+        {/* Floating bottom action panel */}
+        {(onPass || onLike) ? (
+          <View style={styles.bottomBar}>
+            {onPass ? (
+              <TouchableOpacity style={styles.btnPass} onPress={() => { onPass(profile.id); onClose(); }}>
+                <Text style={styles.btnPassText}>{isMatch ? "Unmatch" : "Pass"}</Text>
+              </TouchableOpacity>
+            ) : null}
+            
+            {onLike ? (
+              <TouchableOpacity style={styles.btnLike} onPress={() => { onLike(profile.id); onClose(); }}>
+                <LinearGradient colors={theme.gradientAccent} style={styles.btnLikeGrad}>
+                  <Ionicons name={isMatch ? "chatbubble-ellipses-outline" : "heart"} size={20} color="#fff" />
+                  <Text style={styles.btnLikeText}>{isMatch ? "Message" : "Accept Match"}</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        ) : null}
 
       </View>
     </Modal>

@@ -123,15 +123,34 @@ class AuthController extends Controller
 
         $user->update($validated);
 
-        if ($request->has('photos') && is_array($request->photos)) {
-            ProfilePhoto::where('user_id', $user->id)->delete();
-            foreach ($request->photos as $idx => $photoUrl) {
+        if ($request->has('avatar') && !empty($request->avatar)) {
+            $photoExists = ProfilePhoto::where('user_id', $user->id)
+                ->where('photo_url', $request->avatar)
+                ->exists();
+
+            if (!$photoExists) {
+                // Set existing primary photos to false
+                ProfilePhoto::where('user_id', $user->id)->update(['is_primary' => false]);
                 ProfilePhoto::create([
                     'user_id'    => $user->id,
-                    'photo_url'  => $photoUrl,
-                    'is_primary' => $idx === 0,
-                    'sort_order' => $idx,
+                    'photo_url'  => $request->avatar,
+                    'is_primary' => true,
+                    'sort_order' => 0,
                 ]);
+            }
+        }
+
+        if ($request->has('photos') && is_array($request->photos) && count($request->photos) > 0) {
+            ProfilePhoto::where('user_id', $user->id)->delete();
+            foreach ($request->photos as $idx => $photoUrl) {
+                if (!empty($photoUrl)) {
+                    ProfilePhoto::create([
+                        'user_id'    => $user->id,
+                        'photo_url'  => $photoUrl,
+                        'is_primary' => $idx === 0,
+                        'sort_order' => $idx,
+                    ]);
+                }
             }
         }
 
