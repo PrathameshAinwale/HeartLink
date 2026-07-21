@@ -13,7 +13,6 @@ import {
   Dimensions,
   Modal,
   Animated,
-  ScrollView,
   ActivityIndicator,
   Keyboard,
 } from 'react-native';
@@ -83,6 +82,97 @@ const SAMPLE_MESSAGES = [
   },
 ];
 
+// How close to the bottom (in px) counts as "already at the bottom"
+const NEAR_BOTTOM_THRESHOLD = 120;
+
+// Lightweight equality check — avoids JSON.stringify allocations on every
+// 2.5s poll tick, which was previously re-serializing the whole array just
+// to detect read-receipt changes.
+const messagesAreEqual = (a, b) => {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i];
+    const y = b[i];
+    if (x.id !== y.id || x.isRead !== y.isRead || x.text !== y.text) {
+      return false;
+    }
+  }
+  return true;
+};
+
+// Memoized message bubble with a soft fade + rise entrance animation. Since
+// FlatList reuses item identity via keyExtractor, this effect only fires
+// once per message — the first time it mounts — giving new messages a
+// gentle "arrive" motion instead of popping in instantly.
+const MessageBubble = React.memo(function MessageBubble({
+  item,
+  theme,
+  styles,
+  avatarUri,
+  onAvatarPress,
+}) {
+  const isMe = item.sender === 'me';
+  const fade = useRef(new Animated.Value(0)).current;
+  const rise = useRef(new Animated.Value(10)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fade, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.spring(rise, {
+        toValue: 0,
+        useNativeDriver: true,
+        damping: 16,
+        mass: 0.6,
+        stiffness: 180,
+      }),
+    ]).start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <Animated.View
+      style={[
+        styles.msgRow,
+        isMe && styles.msgRowMe,
+        { opacity: fade, transform: [{ translateY: rise }] },
+      ]}
+    >
+      {!isMe && (
+        <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.8}>
+          <Image source={{ uri: avatarUri }} style={styles.msgAvatar} />
+        </TouchableOpacity>
+      )}
+      {isMe ? (
+        <LinearGradient
+          colors={theme.gradientAccent}
+          style={[styles.bubble, styles.bubbleMe]}
+        >
+          <Text style={styles.bubbleTextMe}>{item.text}</Text>
+          <View style={styles.timeRowMe}>
+            <Text style={styles.bubbleTimeMe}>{item.time}</Text>
+            <Ionicons
+              name={item.isRead ? 'checkmark-done' : 'checkmark'}
+              size={13}
+              color={item.isRead ? '#00E5FF' : 'rgba(255,255,255,0.7)'}
+              style={{ marginLeft: 4 }}
+            />
+          </View>
+        </LinearGradient>
+      ) : (
+        <View style={[styles.bubble, styles.bubbleOther]}>
+          <Text style={styles.bubbleTextOther}>{item.text}</Text>
+          <Text style={styles.bubbleTimeOther}>{item.time}</Text>
+        </View>
+      )}
+    </Animated.View>
+  );
+});
+
 export default function ChatDetailScreen() {
   const navigation = useNavigation();
   const route = useRoute();
@@ -96,6 +186,7 @@ export default function ChatDetailScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
+  const [showJumpToBottom, setShowJumpToBottom] = useState(false);
 
   // Custom toast notification state
   const [toastText, setToastText] = useState('');
@@ -106,6 +197,36 @@ export default function ChatDetailScreen() {
   const inputRef = useRef(null);
   const { theme, isDark } = useTheme();
   const styles = useMemo(() => getStyles(theme), [theme]);
+
+  // --- Scroll tracking -----------------------------------------------
+  const isNearBottomRef = useRef(true);
+  const listContentHeightRef = useRef(0);
+  const listLayoutHeightRef = useRef(0);
+  const prevMessageCountRef = useRef(0);
+  const prevLastMessageIdRef = useRef(null);
+
+  const scrollToBottom = useCallback((animated = true) => {
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToEnd({ animated });
+    });
+  }, []);
+
+  const handleScroll = useCallback((e) => {
+    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+    listContentHeightRef.current = contentSize.height;
+    listLayoutHeightRef.current = layoutMeasurement.height;
+    const distanceFromBottom =
+      contentSize.height - contentOffset.y - layoutMeasurement.height;
+    const nearBottom = distanceFromBottom < NEAR_BOTTOM_THRESHOLD;
+    isNearBottomRef.current = nearBottom;
+    setShowJumpToBottom((prev) => (prev === !nearBottom ? prev : !nearBottom));
+  }, []);
+
+  const handleContentSizeChange = useCallback(() => {
+    if (isNearBottomRef.current) {
+      scrollToBottom(true);
+    }
+  }, [scrollToBottom]);
 
   // Dynamic state for active chat recipient user details
   const [activeUser, setActiveUser] = useState(() => {
@@ -124,9 +245,13 @@ export default function ChatDetailScreen() {
 
   useEffect(() => {
     if (route.params?.user) {
-      setActiveUser(prev => ({ ...prev, ...route.params.user }));
+      setActiveUser((prev) => ({ ...prev, ...route.params.user }));
     } else if (route.params?.name) {
-      setActiveUser(prev => ({ ...prev, name: route.params.name, image: route.params.image || prev.image }));
+      setActiveUser((prev) => ({
+        ...prev,
+        name: route.params.name,
+        image: route.params.image || prev.image,
+      }));
     }
   }, [route.params]);
 
@@ -145,8 +270,16 @@ export default function ChatDetailScreen() {
           Animated.delay(delay),
           Animated.loop(
             Animated.sequence([
-              Animated.timing(dotVal, { toValue: 1, duration: 300, useNativeDriver: true }),
-              Animated.timing(dotVal, { toValue: 0.3, duration: 300, useNativeDriver: true }),
+              Animated.timing(dotVal, {
+                toValue: 1,
+                duration: 300,
+                useNativeDriver: true,
+              }),
+              Animated.timing(dotVal, {
+                toValue: 0.3,
+                duration: 300,
+                useNativeDriver: true,
+              }),
               Animated.delay(300),
             ])
           ),
@@ -158,86 +291,117 @@ export default function ChatDetailScreen() {
         createDotAnim(typingDot3, 300),
       ]);
       anim.start();
+      if (isNearBottomRef.current) {
+        scrollToBottom(true);
+      }
     }
     return () => anim && anim.stop();
-  }, [isOtherTyping]);
+  }, [isOtherTyping, scrollToBottom]);
 
   // Real-time message fetcher & background poller
   const targetId = useMemo(() => {
     return route.params?.userId || route.params?.user?.id || activeUser?.id;
   }, [route.params, activeUser]);
 
-  const fetchHistory = useCallback(async (isFirst = false) => {
-    if (isFirst) setIsLoading(true);
-    if (!targetId) {
-      if (isFirst) {
-        setMessages(SAMPLE_MESSAGES);
-        setIsLoading(false);
-      }
-      return;
-    }
-
-    try {
-      const response = await apiGetMessages(targetId);
-      if (response?.is_blocked_by_me) {
-        setIsBlocked(true);
+  const fetchHistory = useCallback(
+    async (isFirst = false) => {
+      if (isFirst) setIsLoading(true);
+      if (!targetId) {
+        if (isFirst) {
+          setMessages(SAMPLE_MESSAGES);
+          prevMessageCountRef.current = SAMPLE_MESSAGES.length;
+          prevLastMessageIdRef.current =
+            SAMPLE_MESSAGES[SAMPLE_MESSAGES.length - 1]?.id ?? null;
+          setIsLoading(false);
+        }
+        return;
       }
 
-      // Dynamically update recipient user details if returned by server
-      const recipientObj = response?.user || response?.recipient || response?.other_user;
-      if (recipientObj && recipientObj.name) {
-        setActiveUser(prev => ({
-          ...prev,
-          name: recipientObj.name || prev.name,
-          image: recipientObj.avatar || recipientObj.image || prev.image,
-          online: recipientObj.online !== undefined ? recipientObj.online : prev.online,
-        }));
-      }
+      try {
+        const response = await apiGetMessages(targetId);
+        if (response?.is_blocked_by_me) {
+          setIsBlocked(true);
+        }
 
-      let messagesData = [];
-      if (response && response.data) messagesData = response.data;
-      else if (response && response.messages) messagesData = response.messages;
-      else if (Array.isArray(response)) messagesData = response;
-      else if (response && response.success && response.data) messagesData = response.data;
+        const recipientObj =
+          response?.user || response?.recipient || response?.other_user;
+        if (recipientObj && recipientObj.name) {
+          setActiveUser((prev) => ({
+            ...prev,
+            name: recipientObj.name || prev.name,
+            image: recipientObj.avatar || recipientObj.image || prev.image,
+            online:
+              recipientObj.online !== undefined
+                ? recipientObj.online
+                : prev.online,
+          }));
+        }
 
-      if (Array.isArray(messagesData) && messagesData.length > 0) {
-        const formatted = messagesData.map((m) => ({
-          id: m.id?.toString() || Date.now().toString(),
-          text: m.message || m.text || m.content || '',
-          sender: m.sender_id == targetId ? 'other' : 'me',
-          time: m.created_at
-            ? new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            : 'Now',
-          isRead: Boolean(m.is_read),
-        }));
+        let messagesData = [];
+        if (response && response.data) messagesData = response.data;
+        else if (response && response.messages) messagesData = response.messages;
+        else if (Array.isArray(response)) messagesData = response;
+        else if (response && response.success && response.data)
+          messagesData = response.data;
 
-        setMessages((prev) => {
-          if (
-            prev.length !== formatted.length ||
-            (formatted.length > 0 && prev[prev.length - 1]?.id !== formatted[formatted.length - 1]?.id) ||
-            JSON.stringify(prev.map(p => p.isRead)) !== JSON.stringify(formatted.map(f => f.isRead))
-          ) {
-            // Only auto-scroll on updates if the user is not actively typing
-            if (isFirst) {
-              setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 120);
-            }
-            return formatted;
+        if (Array.isArray(messagesData) && messagesData.length > 0) {
+          const formatted = messagesData.map((m) => ({
+            id: m.id?.toString() || Date.now().toString(),
+            text: m.message || m.text || m.content || '',
+            sender: m.sender_id == targetId ? 'other' : 'me',
+            time: m.created_at
+              ? new Date(m.created_at).toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })
+              : 'Now',
+            isRead: Boolean(m.is_read),
+          }));
+
+          const newLastId = formatted[formatted.length - 1]?.id ?? null;
+          const hasNewMessage =
+            formatted.length !== prevMessageCountRef.current ||
+            newLastId !== prevLastMessageIdRef.current;
+
+          setMessages((prev) =>
+            messagesAreEqual(prev, formatted) ? prev : formatted
+          );
+
+          // Only scroll if it's the first load OR we're near bottom AND there's a new message
+          if (isFirst) {
+            setTimeout(() => scrollToBottom(false), 250);
+          } else if (hasNewMessage && isNearBottomRef.current) {
+            // Use requestAnimationFrame for smoother scroll after state update
+            requestAnimationFrame(() => {
+              scrollToBottom(true);
+            });
           }
-          return prev;
-        });
-      } else if (isFirst) {
-        setMessages(SAMPLE_MESSAGES);
+
+          prevMessageCountRef.current = formatted.length;
+          prevLastMessageIdRef.current = newLastId;
+        } else if (isFirst) {
+          setMessages(SAMPLE_MESSAGES);
+          prevMessageCountRef.current = SAMPLE_MESSAGES.length;
+          prevLastMessageIdRef.current =
+            SAMPLE_MESSAGES[SAMPLE_MESSAGES.length - 1]?.id ?? null;
+        }
+      } catch (error) {
+        console.log('Error fetching messages:', error);
+        if (isFirst) {
+          setMessages(SAMPLE_MESSAGES);
+          prevMessageCountRef.current = SAMPLE_MESSAGES.length;
+          prevLastMessageIdRef.current =
+            SAMPLE_MESSAGES[SAMPLE_MESSAGES.length - 1]?.id ?? null;
+        }
+      } finally {
+        if (isFirst) {
+          setIsLoading(false);
+          setTimeout(() => scrollToBottom(false), 250);
+        }
       }
-    } catch (error) {
-      console.log('Error fetching messages:', error);
-      if (isFirst) setMessages(SAMPLE_MESSAGES);
-    } finally {
-      if (isFirst) {
-        setIsLoading(false);
-        setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 250);
-      }
-    }
-  }, [targetId]);
+    },
+    [targetId, scrollToBottom]
+  );
 
   // Auto-polling interval every 2.5s for real-time messaging only when chat is active
   useEffect(() => {
@@ -255,17 +419,21 @@ export default function ChatDetailScreen() {
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
 
     const showSub = Keyboard.addListener(showEvent, () => {
-      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
+      if (isNearBottomRef.current) {
+        setTimeout(() => scrollToBottom(true), 100);
+      }
     });
     const hideSub = Keyboard.addListener(hideEvent, () => {
-      setTimeout(() => listRef.current?.scrollToEnd({ animated: false }), 50);
+      if (isNearBottomRef.current) {
+        setTimeout(() => scrollToBottom(false), 50);
+      }
     });
 
     return () => {
       showSub.remove();
       hideSub.remove();
     };
-  }, []);
+  }, [scrollToBottom]);
 
   // Custom Toast Trigger
   const triggerCustomToast = (msg) => {
@@ -298,27 +466,43 @@ export default function ChatDetailScreen() {
       id: `temp-${Date.now()}`,
       text: textToSend,
       sender: 'me',
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      time: new Date().toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
       isRead: false,
       pending: true,
     };
 
-    setMessages((p) => [...p, newMessage]);
+    setMessages((p) => {
+      const next = [...p, newMessage];
+      prevMessageCountRef.current = next.length;
+      prevLastMessageIdRef.current = newMessage.id;
+      return next;
+    });
     setInput('');
+
+    // Force scroll to bottom immediately after adding message
+    isNearBottomRef.current = true;
+    setShowJumpToBottom(false);
     
-    // Maintain keyboard focus continuously and perform double scroll passes
-    setTimeout(() => {
-      inputRef.current?.focus();
-      listRef.current?.scrollToEnd({ animated: true });
-    }, 50);
-    setTimeout(() => {
-      listRef.current?.scrollToEnd({ animated: true });
-    }, 200);
+    // Use requestAnimationFrame to ensure scroll happens after render
+    requestAnimationFrame(() => {
+      scrollToBottom(true);
+    });
 
     if (targetId) {
       try {
         await apiSendMessage(targetId, textToSend);
-        fetchHistory(false);
+        // Fetch new messages but preserve scroll position
+        await fetchHistory(false);
+        
+        // After fetching, scroll to bottom again
+        requestAnimationFrame(() => {
+          if (isNearBottomRef.current) {
+            scrollToBottom(true);
+          }
+        });
       } catch (error) {
         console.log('Error sending message:', error);
       }
@@ -326,6 +510,39 @@ export default function ChatDetailScreen() {
 
     setIsSending(false);
   };
+
+  // Spring-based press feedback for the send button — makes tapping feel
+  // responsive instead of a flat opacity toggle.
+  const sendScale = useRef(new Animated.Value(1)).current;
+  const onSendPressIn = () => {
+    Animated.spring(sendScale, {
+      toValue: 0.88,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 0,
+    }).start();
+  };
+  const onSendPressOut = () => {
+    Animated.spring(sendScale, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 24,
+      bounciness: 9,
+    }).start();
+  };
+
+  // Jump-to-bottom pill fades/scales in and out instead of hard-mounting,
+  // so it doesn't pop abruptly when the scroll position crosses the
+  // threshold.
+  const jumpAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.spring(jumpAnim, {
+      toValue: showJumpToBottom ? 1 : 0,
+      useNativeDriver: true,
+      friction: 7,
+      tension: 80,
+    }).start();
+  }, [showJumpToBottom, jumpAnim]);
 
   const handleConfirmBlock = () => {
     setShowBlockModal(false);
@@ -366,43 +583,22 @@ export default function ChatDetailScreen() {
     }
   };
 
-  const renderMsg = ({ item }) => {
-    const isMe = item.sender === 'me';
-    return (
-      <View style={[styles.msgRow, isMe && styles.msgRowMe]}>
-        {!isMe && (
-          <TouchableOpacity
-            onPress={() => setShowProfileModal(true)}
-            activeOpacity={0.8}
-          >
-            <Image source={{ uri: activeUser.image }} style={styles.msgAvatar} />
-          </TouchableOpacity>
-        )}
-        {isMe ? (
-          <LinearGradient
-            colors={theme.gradientAccent}
-            style={[styles.bubble, styles.bubbleMe]}
-          >
-            <Text style={styles.bubbleTextMe}>{item.text}</Text>
-            <View style={styles.timeRowMe}>
-              <Text style={styles.bubbleTimeMe}>{item.time}</Text>
-              <Ionicons
-                name={item.isRead ? "checkmark-done" : "checkmark"}
-                size={13}
-                color={item.isRead ? "#00E5FF" : "rgba(255,255,255,0.7)"}
-                style={{ marginLeft: 4 }}
-              />
-            </View>
-          </LinearGradient>
-        ) : (
-          <View style={[styles.bubble, styles.bubbleOther]}>
-            <Text style={styles.bubbleTextOther}>{item.text}</Text>
-            <Text style={styles.bubbleTimeOther}>{item.time}</Text>
-          </View>
-        )}
-      </View>
-    );
-  };
+  const openProfile = useCallback(() => setShowProfileModal(true), []);
+
+  const renderMsg = useCallback(
+    ({ item }) => (
+      <MessageBubble
+        item={item}
+        theme={theme}
+        styles={styles}
+        avatarUri={activeUser.image}
+        onAvatarPress={openProfile}
+      />
+    ),
+    [theme, styles, activeUser.image, openProfile]
+  );
+
+  const keyExtractor = useCallback((item) => item.id, []);
 
   if (isLoading) {
     return (
@@ -433,6 +629,10 @@ export default function ChatDetailScreen() {
       <View style={styles.glowBlobCyan} pointerEvents="none" />
       <View style={styles.glowBlobFuchsia} pointerEvents="none" />
 
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
       {/* Header */}
       <View style={styles.headerContainer}>
         <SafeAreaView edges={['top']} style={styles.headerSafeArea}>
@@ -445,10 +645,9 @@ export default function ChatDetailScreen() {
               <Ionicons name="chevron-back" size={22} color={theme.textPrimary} />
             </TouchableOpacity>
 
-            {/* Clickable Profile Avatar & Name */}
             <TouchableOpacity
               style={styles.headerProfileTouch}
-              onPress={() => setShowProfileModal(true)}
+              onPress={openProfile}
               activeOpacity={0.75}
             >
               <Image source={{ uri: activeUser.image }} style={styles.headerAvatar} />
@@ -475,7 +674,6 @@ export default function ChatDetailScreen() {
               </View>
             </TouchableOpacity>
 
-            {/* 3-Dots Menu Button */}
             <TouchableOpacity
               style={styles.menuBtn}
               onPress={() => setShowMenu((p) => !p)}
@@ -536,25 +734,34 @@ export default function ChatDetailScreen() {
         </TouchableOpacity>
       )}
 
-      {/* Main Keyboard Avoiding View for smooth input lifting above keyboard */}
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
         {/* Messages log */}
         <View style={styles.messagesArea}>
           <FlatList
             ref={listRef}
             data={messages}
             renderItem={renderMsg}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.msgList}
+            keyExtractor={keyExtractor}
+            contentContainerStyle={[
+              styles.msgList,
+              { flexGrow: 1, justifyContent: 'flex-end' },
+            ]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            onScroll={handleScroll}
+            scrollEventThrottle={16}
+            onContentSizeChange={handleContentSizeChange}
+            onLayout={() => scrollToBottom(false)}
+            // Perf: keeps scrolling smooth as the thread grows, and avoids
+            // re-mounting/blanking rows mid-scroll on iOS.
+            initialNumToRender={16}
+            maxToRenderPerBatch={12}
+            windowSize={11}
+            updateCellsBatchingPeriod={50}
+            removeClippedSubviews={Platform.OS === 'android'}
             ListFooterComponent={
               isOtherTyping ? (
                 <View style={[styles.msgRow, { marginBottom: 6 }]}>
-                  <TouchableOpacity onPress={() => setShowProfileModal(true)} activeOpacity={0.8}>
+                  <TouchableOpacity onPress={openProfile} activeOpacity={0.8}>
                     <Image source={{ uri: activeUser.image }} style={styles.msgAvatar} />
                   </TouchableOpacity>
                   <View style={[styles.bubble, styles.bubbleOther, styles.typingBubble]}>
@@ -568,6 +775,44 @@ export default function ChatDetailScreen() {
               ) : null
             }
           />
+
+          {/* "Jump to latest" pill — animates in/out smoothly */}
+          <Animated.View
+            pointerEvents={showJumpToBottom ? 'auto' : 'none'}
+            style={[
+              styles.jumpToBottomBtn,
+              {
+                opacity: jumpAnim,
+                transform: [
+                  {
+                    scale: jumpAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.6, 1],
+                    }),
+                  },
+                  {
+                    translateY: jumpAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [12, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => {
+                isNearBottomRef.current = true;
+                setShowJumpToBottom(false);
+                scrollToBottom(true);
+              }}
+            >
+              <LinearGradient colors={theme.gradientAccent} style={styles.jumpToBottomGrad}>
+                <Ionicons name="chevron-down" size={18} color="#fff" />
+              </LinearGradient>
+            </TouchableOpacity>
+          </Animated.View>
         </View>
 
         {/* Input deck or Blocked Banner */}
@@ -598,19 +843,23 @@ export default function ChatDetailScreen() {
 
                 <TouchableOpacity
                   onPress={send}
-                  activeOpacity={0.8}
+                  onPressIn={onSendPressIn}
+                  onPressOut={onSendPressOut}
+                  activeOpacity={0.9}
                   style={styles.sendBtn}
                   disabled={isSending || !input.trim()}
                 >
-                  <LinearGradient
-                    colors={theme.gradientAccent}
-                    style={[
-                      styles.sendGrad,
-                      (!input.trim() || isSending) && styles.sendGradDisabled,
-                    ]}
-                  >
-                    <Ionicons name="send" size={15} color="#fff" />
-                  </LinearGradient>
+                  <Animated.View style={{ flex: 1, transform: [{ scale: sendScale }] }}>
+                    <LinearGradient
+                      colors={theme.gradientAccent}
+                      style={[
+                        styles.sendGrad,
+                        (!input.trim() || isSending) && styles.sendGradDisabled,
+                      ]}
+                    >
+                      <Ionicons name="send" size={15} color="#fff" />
+                    </LinearGradient>
+                  </Animated.View>
                 </TouchableOpacity>
               </View>
             )}
@@ -905,7 +1154,7 @@ const getStyles = (theme) =>
     },
 
     // Messages log
-    messagesArea: { flex: 1 },
+    messagesArea: { flex: 1, position: 'relative' },
     msgList: { paddingHorizontal: 16, paddingTop: 18, paddingBottom: 16, gap: 10 },
     msgRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
     msgRowMe: { flexDirection: 'row-reverse' },
@@ -940,6 +1189,27 @@ const getStyles = (theme) =>
       color: 'rgba(255,255,255,0.75)',
       marginTop: 4,
       alignSelf: 'flex-end',
+    },
+
+    // Jump-to-bottom pill
+    jumpToBottomBtn: {
+      position: 'absolute',
+      right: 16,
+      bottom: 16,
+      borderRadius: 20,
+      overflow: 'hidden',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+      elevation: 5,
+    },
+    jumpToBottomGrad: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
 
     // Input deck
@@ -1144,105 +1414,6 @@ const getStyles = (theme) =>
     reportReasonTxtSelected: {
       color: theme.textPrimary,
       fontWeight: '700',
-    },
-
-    // Custom User Profile Sheet Modal
-    profileModalContainer: {
-      flex: 1,
-      justifyContent: 'flex-end',
-    },
-    profileModalCloseBtn: {
-      position: 'absolute',
-      top: 50,
-      right: 20,
-      zIndex: 20,
-    },
-    profileCloseCircle: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      backgroundColor: 'rgba(0,0,0,0.5)',
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    profileModalContent: {
-      paddingBottom: 40,
-    },
-    profileModalPhoto: {
-      width: width,
-      height: height * 0.48,
-      resizeMode: 'cover',
-    },
-    profileModalBody: {
-      paddingHorizontal: 20,
-      paddingTop: 20,
-    },
-    profileNameRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-    },
-    profileModalName: {
-      fontSize: 26,
-      fontWeight: '900',
-      color: theme.textPrimary,
-    },
-    profileCompatBadge: {
-      backgroundColor: 'rgba(255,0,127,0.15)',
-      borderRadius: 14,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderWidth: 1,
-      borderColor: 'rgba(255,0,127,0.3)',
-    },
-    profileCompatNum: {
-      color: '#FF007F',
-      fontSize: 13,
-      fontWeight: '800',
-    },
-    profileModalJob: {
-      fontSize: 14,
-      color: theme.textSec,
-      marginTop: 4,
-      marginBottom: 16,
-    },
-    profileSectionCard: {
-      backgroundColor: theme.glass,
-      borderRadius: 20,
-      padding: 16,
-      borderWidth: 1,
-      borderColor: theme.border,
-      marginBottom: 12,
-    },
-    profileSectionTitle: {
-      fontSize: 11,
-      fontWeight: '800',
-      color: theme.textFaint,
-      letterSpacing: 1.2,
-      marginBottom: 8,
-    },
-    profileBioText: {
-      fontSize: 14.5,
-      color: theme.textSec,
-      lineHeight: 22,
-    },
-    profileTagsRow: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 8,
-    },
-    profileTag: {
-      backgroundColor: theme.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)',
-      borderRadius: 16,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderWidth: 1,
-      borderColor: theme.border,
-    },
-    profileTagTxt: {
-      fontSize: 12.5,
-      color: theme.textPrimary,
-      fontWeight: '600',
     },
 
     // Toast Notification
