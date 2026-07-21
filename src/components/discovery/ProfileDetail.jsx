@@ -18,10 +18,14 @@ export default function ProfileDetail({ visible, profile, onClose, onLike, onPas
 
   if (!profile) return null;
 
-  const photos = ensureArray(
-    profile.images && profile.images.length > 0 ? profile.images : profile.photos,
-    [profile.image || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800']
-  );
+  const rawPhotos = profile.images && profile.images.length > 0
+    ? profile.images
+    : (profile.photos && profile.photos.length > 0 ? profile.photos : [profile.image]);
+
+  const photos = ensureArray(rawPhotos, [
+    profile.image || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800'
+  ]).map(p => (typeof p === 'string' ? p : (p?.photo_url || p?.url || profile.image || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800')));
+
   const interests = ensureArray(profile.interests, ['Travel', 'Music', 'Coffee', 'Fitness']);
 
   return (

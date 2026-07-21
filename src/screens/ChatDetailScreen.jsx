@@ -870,7 +870,19 @@ export default function ChatDetailScreen() {
       {/* Profile Detail Modal (Matches & Requests style popup) */}
       <ProfileDetail
         visible={showProfileModal}
-        profile={activeUser}
+        profile={{
+          id: activeUser.id,
+          name: activeUser.name || 'Match User',
+          age: activeUser.age || 24,
+          job: activeUser.job || 'Member',
+          bio: activeUser.bio || 'Connected on HeartLink.',
+          location: activeUser.location || 'Nearby',
+          distance: activeUser.distance || '2 km away',
+          compatibility: activeUser.compatibility || 90,
+          image: activeUser.image || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800',
+          images: activeUser.images || [activeUser.image || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800'],
+          interests: activeUser.interests || ['Travel', 'Music', 'Coffee', 'Photography'],
+        }}
         onClose={() => setShowProfileModal(false)}
         isMatch={true}
       />
