@@ -11,9 +11,10 @@ use App\Http\Controllers\Api\RequestController;
 
 // API v1 Routes
 Route::prefix('v1')->group(function () {
-    // Public Auth Routes
+    // Public Auth & Upload Routes
     Route::post('/auth/register', [AuthController::class, 'register']);
     Route::post('/auth/login',    [AuthController::class, 'login']);
+    Route::post('/upload-image',  [AuthController::class, 'uploadImage']);
 
     // Protected API Routes (Sanctum Auth)
     Route::middleware('auth:sanctum')->group(function () {
@@ -25,6 +26,7 @@ Route::prefix('v1')->group(function () {
         // Discovery & Swiping
         Route::get('/discover',        [DiscoverController::class, 'feed']);
         Route::post('/discover/swipe', [DiscoverController::class, 'swipe']);
+        Route::post('/discover/reset', [DiscoverController::class, 'reset']);
 
         // Matches & Requests
         Route::get('/matches',                         [MatchController::class, 'index']);

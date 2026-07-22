@@ -48,8 +48,38 @@ class DiscoverController extends Controller
 
         $profiles = $query->with('photos')->orderBy('id', 'desc')->get();
 
+        // If user has swiped through all available profiles, auto-reset pass swipes so profiles reappear!
+        if ($profiles->isEmpty()) {
+            Swipe::where('swiper_id', $user->id)->where('type', 'pass')->delete();
+
+            // Re-query without the cleared pass swipes
+            $swipedByMeIds = Swipe::where('swiper_id', $user->id)->pluck('swiped_user_id');
+            $excludeIds = $swipedByMeIds->merge($matchedIds)->merge($blockedIds)->unique();
+
+            $queryRetry = User::where('id', '!=', $user->id)
+                ->whereNotIn('id', $excludeIds);
+
+            if (in_array($userGender, ['male', 'man'])) {
+                $queryRetry->whereIn(\Illuminate\Support\Facades\DB::raw('LOWER(gender)'), ['female', 'woman']);
+            } elseif (in_array($userGender, ['female', 'woman'])) {
+                $queryRetry->whereIn(\Illuminate\Support\Facades\DB::raw('LOWER(gender)'), ['male', 'man']);
+            }
+
+            $profiles = $queryRetry->with('photos')->orderBy('id', 'desc')->get();
+        }
+
         return response()->json([
             'profiles' => $profiles,
+        ]);
+    }
+
+    public function reset(Request $request)
+    {
+        $user = $request->user();
+        Swipe::where('swiper_id', $user->id)->where('type', 'pass')->delete();
+
+        return response()->json([
+            'message' => 'Pass swipes reset successfully',
         ]);
     }
 

@@ -219,6 +219,7 @@ const getStyles = (theme) => StyleSheet.create({
   },
   iconContainerActive: {
     backgroundColor: theme.isDark ? '#fff' : '#0D0F1A',
+    borderRadius:50,
   },
   tabLabel: {
     fontSize: 10,

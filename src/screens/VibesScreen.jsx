@@ -1,14 +1,17 @@
 // src/screens/VibesScreen.jsx — Orbital Vibe Sector Radar
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Animated, Easing,
-  Image, SafeAreaView, StatusBar, ScrollView, Dimensions, Alert, Platform,
+  Image, SafeAreaView, StatusBar, ScrollView, Dimensions, Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import CustomAlertModal from '../components/CustomAlertModal';
+import { apiGetDiscoveryFeed } from '../services/api';
+import { ensureArray, formatImageUrl } from '../utils/helpers';
 
 const { width, height } = Dimensions.get('window');
 
@@ -31,35 +34,21 @@ const ALL_VIBE_NODES = [
   { id: 'v12', name: 'Star Gazer', icon: 'telescope', color: ['#5856D6', '#007AFF'], tagline: 'Space & Stars', onlineCount: 16 },
 ];
 
-const VIBE_PEOPLE = [
-  // Page 1 Matches
-  { id: 'p1', name: 'Sophia', age: 23, vibe: 'v1', match: 94, bio: 'Vinyl collector. Lo-fi gigs and late night tea drinker.', image: 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=500' },
-  { id: 'p2', name: 'Liam', age: 25, vibe: 'v1', match: 89, bio: 'Live music & late night concert chasing.', image: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=500' },
-  { id: 'p3', name: 'Chloe', age: 22, vibe: 'v2', match: 92, bio: 'Matcha latte lover & local indie bookstore crawler.', image: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500' },
-  { id: 'p4', name: 'Zoe', age: 21, vibe: 'v2', match: 85, bio: 'Book reviewer. Pour-over enthusiast.', image: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=500' },
-  { id: 'p5', name: 'Marcus', age: 26, vibe: 'v3', match: 91, bio: 'Backpacker. High trails and early sunrise running.', image: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500' },
-  { id: 'p6', name: 'Emma', age: 24, vibe: 'v3', match: 87, bio: 'Climber & outdoor photographer. Let’s camp!', image: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500' },
-  { id: 'p7', name: 'Alex', age: 23, vibe: 'v4', match: 95, bio: 'Consoles & retro cabinets. Esports fan.', image: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=500' },
-  { id: 'p8', name: 'Lily', age: 24, vibe: 'v4', match: 90, bio: 'Cozy gamer, animal crossing & anime fan.', image: 'https://images.unsplash.com/photo-1530268729831-4b0b9e170218?w=500' },
-  { id: 'p9', name: 'Isabella', age: 24, vibe: 'v5', match: 91, bio: 'Gallery docent. Impressionist art fan & sketch book companion.', image: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500' },
-  { id: 'p10', name: 'Daniel', age: 26, vibe: 'v5', match: 88, bio: 'Clay sculptor. Sunday gallery routes & museum café chats.', image: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=500' },
-  { id: 'p11', name: 'Sofia', age: 22, vibe: 'v6', match: 93, bio: 'Amateur pastry chef. Seeking out taco trucks and street food stalls.', image: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500' },
-  { id: 'p12', name: 'Ethan', age: 25, vibe: 'v6', match: 86, bio: 'Writing a local diner food guide. Let’s grab spicy noodles!', image: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=500' },
-
-  // Page 2 Matches
-  { id: 'p13', name: 'Ava', age: 22, vibe: 'v7', match: 92, bio: 'Yoga, morning run, and healthy smoothies collector.', image: 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=500' },
-  { id: 'p14', name: 'Leo', age: 24, vibe: 'v7', match: 89, bio: 'Gym addict. Morning trail enthusiast.', image: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=500' },
-  { id: 'p15', name: 'Zara', age: 23, vibe: 'v8', match: 94, bio: 'Indie cinema critic. Popcorn fan.', image: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500' },
-  { id: 'p16', name: 'Lucas', age: 26, vibe: 'v8', match: 85, bio: 'Movie marathon host. Nostalgia lover.', image: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=500' },
-  { id: 'p17', name: 'Maya', age: 24, vibe: 'v9', match: 91, bio: 'Building AI agents. Passionate coder.', image: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=500' },
-  { id: 'p18', name: 'Oliver', age: 25, vibe: 'v9', match: 87, bio: 'Product designer. Latte lover.', image: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=500' },
-  { id: 'p19', name: 'Sienna', age: 23, vibe: 'v10', match: 95, bio: 'Backpacking across Europe. Flight seeker.', image: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500' },
-  { id: 'p20', name: 'Noah', age: 26, vibe: 'v10', match: 90, bio: 'Mountain roadtrip fan. Map explorer.', image: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=500' },
-  { id: 'p21', name: 'Emily', age: 22, vibe: 'v11', match: 93, bio: 'Golden retriever parent. Fetch expert.', image: 'https://images.unsplash.com/photo-1530268729831-4b0b9e170218?w=500' },
-  { id: 'p22', name: 'James', age: 24, vibe: 'v11', match: 88, bio: 'Fostering stray pups. Nature walker.', image: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=500' },
-  { id: 'p23', name: 'Nova', age: 23, vibe: 'v12', match: 94, bio: 'Astronomy researcher. Deep sky enthusiast.', image: 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=500' },
-  { id: 'p24', name: 'Tyler', age: 25, vibe: 'v12', match: 87, bio: 'Astrophotographer. Star maps fan.', image: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=500' },
-];
+// Keyword map: each vibe id → interest keywords that match users to it
+const VIBE_KEYWORDS = {
+  v1:  ['music', 'vinyl', 'lo-fi', 'concert', 'jazz', 'beats'],
+  v2:  ['coffee', 'cafe', 'book', 'reading', 'tea', 'brew'],
+  v3:  ['hiking', 'nature', 'camping', 'trail', 'outdoor', 'climbing'],
+  v4:  ['gaming', 'game', 'esport', 'anime', 'console', 'retro'],
+  v5:  ['art', 'gallery', 'painting', 'sculpture', 'design', 'canvas'],
+  v6:  ['food', 'cooking', 'foodie', 'chef', 'restaurant', 'baking'],
+  v7:  ['fitness', 'gym', 'yoga', 'running', 'workout', 'sport', 'exercise'],
+  v8:  ['movie', 'cinema', 'film', 'series', 'netflix', 'watch'],
+  v9:  ['tech', 'coding', 'programming', 'ai', 'startup', 'developer'],
+  v10: ['travel', 'wanderlust', 'backpacking', 'adventure', 'flight', 'road'],
+  v11: ['pet', 'dog', 'cat', 'animal', 'pup', 'foster'],
+  v12: ['star', 'astronomy', 'space', 'galaxy', 'telescope', 'cosmos'],
+};
 
 export default function VibesScreen() {
   const { theme, isDark } = useTheme();
@@ -68,6 +57,42 @@ export default function VibesScreen() {
   // Vibe Sector Page State (0 = Sector A, 1 = Sector B)
   const [vibePage, setVibePage] = useState(0);
   const [selectedVibe, setSelectedVibe] = useState('v1');
+
+  // Real API-sourced people from the discovery feed
+  const [realPeople, setRealPeople] = useState([]);
+  const [loadingPeople, setLoadingPeople] = useState(true);
+
+  useEffect(() => {
+    const fetchPeople = async () => {
+      try {
+        const res = await apiGetDiscoveryFeed();
+        if (res?.profiles && Array.isArray(res.profiles)) {
+          const formatted = res.profiles.map(u => {
+            let img = u.avatar || '';
+            const photos = ensureArray(u.photos);
+            if (photos.length > 0) {
+              img = (typeof photos[0] === 'string' ? photos[0] : photos[0]?.photo_url) || img;
+            }
+            return {
+              id: u.id,
+              name: u.name || 'Member',
+              age: u.age || 24,
+              match: u.compatibility_score || 85,
+              bio: u.bio || '',
+              image: formatImageUrl(img),
+              interests: ensureArray(u.interests),
+            };
+          });
+          setRealPeople(formatted);
+        }
+      } catch (e) {
+        console.warn('Vibes feed fetch error:', e?.message);
+      } finally {
+        setLoadingPeople(false);
+      }
+    };
+    fetchPeople();
+  }, []);
 
   // Slow float loops
   const floatAnim1 = useRef(new Animated.Value(0)).current;
@@ -107,6 +132,14 @@ export default function VibesScreen() {
   const translateY2 = floatAnim2.interpolate({ inputRange: [0, 1], outputRange: [-3, 5] });
   const translateY3 = floatAnim3.interpolate({ inputRange: [0, 1], outputRange: [-5, 3] });
 
+  // Helper: count real users per vibe node
+  const countForVibe = useCallback((vibeId) => {
+    const keywords = VIBE_KEYWORDS[vibeId] || [];
+    return realPeople.filter(p =>
+      p.interests.some(i => keywords.some(kw => i.toLowerCase().includes(kw)))
+    ).length;
+  }, [realPeople]);
+
   // Compute exact node coordinates on a single outer ring dynamically (Radius: 120)
   const activeNodesList = useMemo(() => {
     const startIndex = vibePage * 6;
@@ -128,22 +161,32 @@ export default function VibesScreen() {
       // Distribute float animations
       const animGroup = (idx % 3) + 1;
 
+      // Real online count from API
+      const realCount = countForVibe(node.id);
+
       return {
         ...node,
+        onlineCount: realCount > 0 ? realCount : node.onlineCount,
         left,
         top,
         animGroup,
       };
     });
-  }, [vibePage]);
+  }, [vibePage, countForVibe]);
 
   const activeVibe = useMemo(() => {
     return ALL_VIBE_NODES.find(v => v.id === selectedVibe);
   }, [selectedVibe]);
 
+  // Map real users to selected vibe by interest keyword overlap
   const matches = useMemo(() => {
-    return VIBE_PEOPLE.filter(p => p.vibe === selectedVibe);
-  }, [selectedVibe]);
+    const keywords = VIBE_KEYWORDS[selectedVibe] || [];
+    return realPeople.filter(person =>
+      person.interests.some(interest =>
+        keywords.some(kw => interest.toLowerCase().includes(kw))
+      )
+    );
+  }, [selectedVibe, realPeople]);
 
   const glowColors = useMemo(() => {
     return activeVibe ? activeVibe.color : ['#A855F7', '#6366F1'];
@@ -288,49 +331,62 @@ export default function VibesScreen() {
 
           {/* Matches Spark Deck */}
           <Text style={styles.sectionLabel}>Match Spark Deck</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            snapToInterval={width * 0.72 + 16}
-            decelerationRate="fast"
-            contentContainerStyle={styles.matchesDeck}
-          >
-            {matches.map(person => (
-              <View key={person.id} style={styles.sparkCard}>
-                <BlurView intensity={isDark ? 30 : 60} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
-                
-                <Image source={{ uri: person.image }} style={styles.sparkImg} />
-                <LinearGradient colors={['transparent', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.9)']} style={styles.sparkOverlay} />
-
-                {/* Compat Rate Badge */}
-                <BlurView intensity={50} tint="dark" style={styles.compatBadge}>
-                  <Ionicons name="heart" size={10} color="#FF375F" />
-                  <Text style={styles.compatText}>{person.match}% Compatibility</Text>
-                </BlurView>
-
-                {/* Info Text */}
-                <View style={styles.sparkDetails}>
-                  <Text style={styles.sparkName}>{person.name}, {person.age}</Text>
-                  <Text style={styles.sparkBio} numberOfLines={2}>{person.bio}</Text>
-                  
-                  <TouchableOpacity
-                    style={styles.connectBtn}
-                    onPress={() => onVibeConnect(person.name)}
-                    activeOpacity={0.8}
-                  >
-                    <LinearGradient
-                      colors={glowColors}
-                      start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                      style={styles.connectBtnGrad}
-                    >
-                      <Ionicons name="sparkles" size={12} color="#fff" />
-                      <Text style={styles.connectText}>Send Spark</Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </View>
+            {loadingPeople ? (
+              <View style={{ paddingHorizontal: 20, paddingVertical: 30, alignItems: 'center', gap: 10 }}>
+                <ActivityIndicator size="small" color="#A855F7" />
+                <Text style={{ color: theme.textSec, fontSize: 13 }}>Finding people in this vibe…</Text>
               </View>
-            ))}
-          </ScrollView>
+            ) : matches.length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                snapToInterval={width * 0.72 + 16}
+                decelerationRate="fast"
+                contentContainerStyle={styles.matchesDeck}
+              >
+                {matches.map(person => (
+                  <View key={person.id} style={styles.sparkCard}>
+                    <BlurView intensity={isDark ? 30 : 60} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
+                    
+                    <Image source={{ uri: person.image }} style={styles.sparkImg} resizeMode="cover" />
+                    <LinearGradient colors={['transparent', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.9)']} style={styles.sparkOverlay} />
+
+                    {/* Compat Rate Badge */}
+                    <BlurView intensity={50} tint="dark" style={styles.compatBadge}>
+                      <Ionicons name="heart" size={10} color="#FF375F" />
+                      <Text style={styles.compatText}>{person.match}% Compatibility</Text>
+                    </BlurView>
+
+                    {/* Info Text */}
+                    <View style={styles.sparkDetails}>
+                      <Text style={styles.sparkName}>{person.name}, {person.age}</Text>
+                      <Text style={styles.sparkBio} numberOfLines={2}>{person.bio}</Text>
+                      
+                      <TouchableOpacity
+                        style={styles.connectBtn}
+                        onPress={() => onVibeConnect(person.name)}
+                        activeOpacity={0.8}
+                      >
+                        <LinearGradient
+                          colors={glowColors}
+                          start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                          style={styles.connectBtnGrad}
+                        >
+                          <Ionicons name="sparkles" size={12} color="#fff" />
+                          <Text style={styles.connectText}>Send Spark</Text>
+                        </LinearGradient>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
+            ) : (
+              <View style={{ paddingHorizontal: 20, paddingVertical: 24, alignItems: 'center', gap: 8 }}>
+                <Ionicons name="planet-outline" size={36} color={theme.textFaint} />
+                <Text style={{ color: theme.textSec, fontSize: 14, fontWeight: '700' }}>No one in this vibe yet</Text>
+                <Text style={{ color: theme.textFaint, fontSize: 12, textAlign: 'center' }}>More people will appear here as they join HeartLink and set their interests.</Text>
+              </View>
+            )}
         </ScrollView>
       </SafeAreaView>
 
@@ -596,7 +652,6 @@ const getStyles = (theme) => StyleSheet.create({
     position: 'absolute',
     width: '100%',
     height: '100%',
-    resizeMode: 'cover',
   },
   sparkOverlay: {
     position: 'absolute',

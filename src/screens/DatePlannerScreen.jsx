@@ -1,43 +1,49 @@
 // src/screens/DatePlannerScreen.jsx — Plan a Date with Curated Restaurant Spots & Top Boosted Spot
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  Image, SafeAreaView, StatusBar, ScrollView, Dimensions, Alert, Platform,
+  Image, SafeAreaView, StatusBar, ScrollView, Dimensions, Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
+import { apiGetRestaurants } from '../services/api';
 
 const { width, height } = Dimensions.get('window');
-
-const BOOSTED_RESTAURANT = {
-  id: 'boost_r1',
-  name: 'Amour Rooftop Bar',
-  cuisine: 'Italian Fine Dining & Wine',
-  rating: '5.0',
-  price: 'Rs',
-  location: 'Chelsea, NY',
-  image: 'https://images.unsplash.com/photo-1533777857889-4be7c70b33f7?w=800',
-  tag: 'COSMIC BOOST',
-  desc: 'Experience pure romance with breathtaking Manhattan skyline views, award-winning vintage wines, and intimate violin sessions.',
-  address: '150 West 24th St, New York, NY 10011',
-  mapLink: 'https://maps.google.com/?q=Amour+Rooftop+Bar+Chelsea+NY'
-};
-
-const RESTAURANTS = [
-  { id: 'r1', name: 'La Parisienne', cuisine: 'French Bistro', rating: '4.9', price: 'Rs', location: 'SoHo, NY', image: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400', tag: 'Most Romantic' },
-  { id: 'r2', name: 'Zen Garden Sushi', cuisine: 'Japanese Fine Dining', rating: '4.8', price: 'Rs', location: 'Tribeca, NY', image: 'https://images.unsplash.com/photo-1579027989536-b7b1ecda6374?w=400', tag: 'Intimate Vibe' },
-  { id: 'r3', name: 'Sunset Roof Lounge', cuisine: 'Cocktails & Bites', rating: '4.7', price: 'Rs', location: 'Midtown, NY', image: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400', tag: 'Stellar Views' },
-];
 
 export default function DatePlannerScreen() {
   const navigation = useNavigation();
   const { theme, isDark } = useTheme();
   const styles = useMemo(() => getStyles(theme), [theme]);
 
+  const [restaurants, setRestaurants] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchRestaurants = async () => {
+      try {
+        const res = await apiGetRestaurants();
+        if (res?.restaurants && Array.isArray(res.restaurants)) {
+          setRestaurants(res.restaurants);
+        }
+      } catch (e) {
+        console.warn('Restaurants fetch error:', e?.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchRestaurants();
+  }, []);
+
+  // First is_boosted = true entry is the featured spot; rest are the curated grid
+  const boosted = restaurants.find(r => r.is_boosted) || restaurants[0] || null;
+  const curated = restaurants.filter(r => r.id !== boosted?.id);
+
   const renderBoostedRestaurant = () => {
+    if (!boosted) return null;
     return (
       <View style={styles.boostSection}>
         <View style={styles.boostHeader}>
@@ -53,25 +59,25 @@ export default function DatePlannerScreen() {
 
         <TouchableOpacity
           style={styles.boostCard}
-          onPress={() => navigation.navigate('RestaurantDetail', { spot: BOOSTED_RESTAURANT })}
+          onPress={() => navigation.navigate('RestaurantDetail', { spot: boosted })}
           activeOpacity={0.9}
         >
-          <Image source={{ uri: BOOSTED_RESTAURANT.image }} style={styles.boostCardImg} />
+          <Image source={{ uri: boosted.image }} style={styles.boostCardImg} />
           <LinearGradient colors={['transparent', 'rgba(10, 5, 28, 0.25)', 'rgba(10, 5, 28, 0.90)']} style={styles.boostCardOverlay} />
 
           <View style={styles.boostTagPill}>
-            <Text style={styles.boostTagText}>{BOOSTED_RESTAURANT.tag}</Text>
+            <Text style={styles.boostTagText}>COSMIC BOOST</Text>
           </View>
 
           <View style={styles.boostDetails}>
-            <Text style={styles.boostName}>{BOOSTED_RESTAURANT.name}</Text>
-            <Text style={styles.boostCuisine}>{BOOSTED_RESTAURANT.cuisine} · {BOOSTED_RESTAURANT.price}</Text>
+            <Text style={styles.boostName}>{boosted.name}</Text>
+            <Text style={styles.boostCuisine}>{boosted.category} · {boosted.price_range}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
               <Ionicons name="location-sharp" size={13} color="#FF007F" />
-              <Text style={styles.boostLoc}>{BOOSTED_RESTAURANT.location}</Text>
+              <Text style={styles.boostLoc}>{boosted.location}</Text>
               <Text style={styles.boostLoc}>·</Text>
               <Ionicons name="star" size={13} color="#FFD700" />
-              <Text style={styles.boostLoc}>{BOOSTED_RESTAURANT.rating}</Text>
+              <Text style={styles.boostLoc}>{boosted.rating}</Text>
             </View>
           </View>
         </TouchableOpacity>
@@ -94,50 +100,67 @@ export default function DatePlannerScreen() {
           <Text style={styles.sub}>Plan an unforgettable spot connection with your matches</Text>
         </View>
 
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-          {/* Top Boosted Restaurant */}
-          {renderBoostedRestaurant()}
-
-          <Text style={styles.sectionLabel}>Curated Restaurant Spots</Text>
-          <View style={styles.spotGrid}>
-            {RESTAURANTS.map(item => {
-              return (
-                <TouchableOpacity
-                  key={item.id}
-                  style={styles.spotCard}
-                  onPress={() => navigation.navigate('RestaurantDetail', { spot: item })}
-                  activeOpacity={0.9}
-                >
-                  <BlurView
-                    intensity={isDark ? 40 : 60}
-                    tint={isDark ? "dark" : "light"}
-                    style={StyleSheet.absoluteFill}
-                  />
-                  <Image source={{ uri: item.image }} style={styles.spotImg} />
-                  <View style={styles.spotOverlay} />
-                  
-                  {item.tag && (
-                    <View style={styles.spotTag}>
-                      <Text style={styles.spotTagText}>{item.tag}</Text>
-                    </View>
-                  )}
-
-                  <View style={styles.spotTextWrap}>
-                    <Text style={styles.spotName}>{item.name}</Text>
-                    <Text style={styles.spotCuisine}>{item.cuisine} · {item.price}</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 }}>
-                      <Ionicons name="location-sharp" size={12} color="#FF007F" />
-                      <Text style={styles.spotLoc}>{item.location}</Text>
-                      <Text style={styles.spotLoc}>·</Text>
-                      <Ionicons name="star" size={12} color="#FFD700" />
-                      <Text style={styles.spotLoc}>{item.rating}</Text>
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
+        {loading ? (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator size="large" color="#FF007F" />
+            <Text style={styles.loadingText}>Finding the best spots for you…</Text>
           </View>
-        </ScrollView>
+        ) : (
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+            {/* Top Boosted Restaurant */}
+            {renderBoostedRestaurant()}
+
+            {curated.length > 0 && (
+              <>
+                <Text style={styles.sectionLabel}>Curated Restaurant Spots</Text>
+                <View style={styles.spotGrid}>
+                  {curated.map(item => (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={styles.spotCard}
+                      onPress={() => navigation.navigate('RestaurantDetail', { spot: item })}
+                      activeOpacity={0.9}
+                    >
+                      <BlurView
+                        intensity={isDark ? 40 : 60}
+                        tint={isDark ? "dark" : "light"}
+                        style={StyleSheet.absoluteFill}
+                      />
+                      <Image source={{ uri: item.image }} style={styles.spotImg} />
+                      <View style={styles.spotOverlay} />
+
+                      {item.is_boosted && (
+                        <View style={styles.spotTag}>
+                          <Text style={styles.spotTagText}>Featured</Text>
+                        </View>
+                      )}
+
+                      <View style={styles.spotTextWrap}>
+                        <Text style={styles.spotName}>{item.name}</Text>
+                        <Text style={styles.spotCuisine}>{item.category} · {item.price_range}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 }}>
+                          <Ionicons name="location-sharp" size={12} color="#FF007F" />
+                          <Text style={styles.spotLoc}>{item.location}</Text>
+                          <Text style={styles.spotLoc}>·</Text>
+                          <Ionicons name="star" size={12} color="#FFD700" />
+                          <Text style={styles.spotLoc}>{item.rating}</Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            )}
+
+            {restaurants.length === 0 && !loading && (
+              <View style={styles.emptyWrap}>
+                <Ionicons name="restaurant-outline" size={48} color={theme.textFaint} />
+                <Text style={styles.emptyTitle}>No spots yet</Text>
+                <Text style={styles.emptySub}>Date spots will appear here once the team adds them.</Text>
+              </View>
+            )}
+          </ScrollView>
+        )}
       </SafeAreaView>
     </LinearGradient>
   );
@@ -179,6 +202,18 @@ const getStyles = (theme) => StyleSheet.create({
   title: { fontSize: 28, fontWeight: '900', color: theme.textPrimary, letterSpacing: -0.6 },
   sub: { fontSize: 13, color: theme.textSec, marginTop: 4 },
 
+  loadingWrap: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 14,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: theme.textSec,
+    fontWeight: '500',
+  },
+
   scroll: {
     paddingBottom: 110,
   },
@@ -191,6 +226,25 @@ const getStyles = (theme) => StyleSheet.create({
     marginBottom: 12,
     marginTop: 18,
     paddingHorizontal: 20,
+  },
+
+  // Empty state
+  emptyWrap: {
+    alignItems: 'center',
+    paddingTop: 60,
+    paddingHorizontal: 40,
+    gap: 10,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: theme.textPrimary,
+  },
+  emptySub: {
+    fontSize: 13,
+    color: theme.textSec,
+    textAlign: 'center',
+    lineHeight: 20,
   },
 
   // Cosmic Boost Spot Card

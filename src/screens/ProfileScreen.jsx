@@ -12,6 +12,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../theme/ThemeContext';
 import * as ImagePicker from 'expo-image-picker';
 import { updateUserProfile } from '../services/userService';
+import { apiUploadImage } from '../services/api';
 import { ensureArray } from '../utils/helpers';
 
 import CustomAlertModal from '../components/CustomAlertModal';
@@ -81,6 +82,38 @@ export default function ProfileScreen() {
     };
   }, [user]);
 
+  // Auto-sync: If user has local file:// URIs stored before upload was enabled, upload them to server now
+  useEffect(() => {
+    const syncLocalPhotosToBackend = async () => {
+      if (!user?.id) return;
+      const currentPhotos = ensureArray(user.photos?.map(p => (typeof p === 'string' ? p : p.photo_url || p.uri)), []);
+      const currentAvatar = user.avatar || '';
+
+      const hasLocalFile = currentAvatar.startsWith('file://') || currentPhotos.some(p => typeof p === 'string' && p.startsWith('file://'));
+      if (!hasLocalFile) return;
+
+      try {
+        const uploadedAvatar = currentAvatar.startsWith('file://') ? await apiUploadImage(currentAvatar) : currentAvatar;
+        const uploadedPhotos = await Promise.all(
+          currentPhotos.map(p => (typeof p === 'string' && p.startsWith('file://')) ? apiUploadImage(p) : p)
+        );
+
+        const updatedPayload = {
+          avatar: uploadedAvatar,
+          photos: uploadedPhotos,
+          images: uploadedPhotos,
+        };
+
+        updateUser(updatedPayload);
+        await updateUserProfile(user.id, updatedPayload);
+      } catch (err) {
+        console.warn('Auto-sync photo upload error:', err?.message);
+      }
+    };
+
+    syncLocalPhotosToBackend();
+  }, [user?.id]);
+
   // State for Edit Modal
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState('');
@@ -135,10 +168,12 @@ export default function ProfileScreen() {
       }
 
       if (!result.canceled && result.assets && result.assets[0]?.uri) {
-        const croppedUri = result.assets[0].uri;
-        const nextPhotos = [croppedUri, ...allPhotos.filter(p => p !== croppedUri)];
+        const localUri = result.assets[0].uri;
+        const uploadedUrl = await apiUploadImage(localUri);
+
+        const nextPhotos = [uploadedUrl, ...allPhotos.filter(p => p !== uploadedUrl && p !== localUri)];
         const updatedPayload = {
-          avatar: croppedUri,
+          avatar: uploadedUrl,
           photos: nextPhotos,
           images: nextPhotos,
         };

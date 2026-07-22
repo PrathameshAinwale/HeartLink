@@ -18,6 +18,11 @@ class Restaurant extends Model
         'description',
         'price_range',
         'map_url',
+        'is_boosted',
+    ];
+
+    protected $casts = [
+        'is_boosted' => 'boolean',
     ];
 
     public function bookings()

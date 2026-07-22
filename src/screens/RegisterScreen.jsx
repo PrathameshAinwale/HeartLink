@@ -12,6 +12,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNavigation } from '@react-navigation/native';
 import { registerUser } from "../services/authService";
 import { createUserProfile } from "../services/userService";
+import { apiUploadImage } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 import { LIGHT_THEME } from '../theme/colors';
 import CustomAlertModal from '../components/CustomAlertModal';
@@ -687,34 +688,38 @@ export default function RegisterScreen() {
         }
       }
 
-      const registrationPayload = {
-        name: data.name,
-        email: data.email || `${data.name.toLowerCase().replace(/\s+/g, '')}@heartlink.com`,
-        password: data.password || 'password123',
-        age: parseInt(data.age) || 24,
-        dob: dobString,
-        gender: data.gender || 'Man',
-        bio: `Loving life, seeking ${data.relationshipType?.toLowerCase() || 'relationship'}. Hobbies include ${(data.hobbies || []).slice(0, 3).join(', ')}.`,
-        job: 'Member',
-        avatar: (data.images && data.images[0]) || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400',
-        city: data.city || 'Chicago',
-        state: data.state || 'IL',
-        country: data.country || 'USA',
-        relationship_type: data.relationshipType || 'Long-term',
-        interests: data.hobbies || [],
-        photos: (data.images || []).filter(x => !!x),
-      };
+      // Upload local images to backend server public storage
+      const rawImages = (data.images || []).filter(x => !!x);
+      Promise.all(rawImages.map(img => apiUploadImage(img)))
+        .then((uploadedPhotos) => {
+          const validPhotos = uploadedPhotos.filter(Boolean);
+          const avatarUrl = validPhotos[0] || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400';
 
-      registerUser(registrationPayload)
-        .then((res) => {
-          login(res.user || registrationPayload, res.access_token || null);
+          const registrationPayload = {
+            name: data.name,
+            email: data.email || `${data.name.toLowerCase().replace(/\s+/g, '')}@heartlink.com`,
+            password: data.password || 'password123',
+            age: parseInt(data.age) || 24,
+            dob: dobString,
+            gender: data.gender || 'Man',
+            bio: `Loving life, seeking ${data.relationshipType?.toLowerCase() || 'relationship'}. Hobbies include ${(data.hobbies || []).slice(0, 3).join(', ')}.`,
+            job: 'Member',
+            avatar: avatarUrl,
+            city: data.city || 'Chicago',
+            state: data.state || 'IL',
+            country: data.country || 'USA',
+            relationship_type: data.relationshipType || 'Long-term',
+            interests: data.hobbies || [],
+            photos: validPhotos,
+          };
+
+          return registerUser(registrationPayload).then((res) => {
+            login(res.user || registrationPayload, res.access_token || null);
+          });
         })
         .catch((err) => {
           setValidationAlertMsg(err.message || 'Registration completed!');
           setValidationAlertVisible(true);
-          setTimeout(() => {
-            login(registrationPayload, null);
-          }, 1200);
         });
     }
   };

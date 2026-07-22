@@ -1,4 +1,28 @@
-// src/utils/helpers.js
+import { Platform } from 'react-native';
+import { getActiveServerBaseUrl } from '../services/api';
+
+export const formatImageUrl = (url, fallback = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=900') => {
+  if (!url || typeof url !== 'string' || url.trim() === '') {
+    return fallback;
+  }
+
+  const cleanUrl = url.trim();
+
+  // If it's an uploaded image path (e.g. /uploads/... or http://.../uploads/...)
+  if (cleanUrl.includes('/uploads/')) {
+    const relativePath = cleanUrl.substring(cleanUrl.indexOf('/uploads/'));
+    const baseUrl = getActiveServerBaseUrl();
+    return `${baseUrl}${relativePath}`;
+  }
+
+  // If it's an un-uploaded local file:// URL stored before upload feature was added
+  if (cleanUrl.startsWith('file://')) {
+    return fallback;
+  }
+
+  return cleanUrl;
+};
+
 export const formatDistance = (km) => {
   if (km < 1) return `${Math.round(km * 1000)}m away`;
   return `${km}km away`;

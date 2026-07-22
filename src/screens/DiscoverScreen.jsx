@@ -1,105 +1,20 @@
 // src/screens/DiscoverScreen.jsx
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, TouchableWithoutFeedback,
-  Animated, Dimensions, Image,
-  SafeAreaView, ScrollView, FlatList, StatusBar, Platform, Easing,
+  View, Text, StyleSheet, TouchableOpacity, Pressable,
+  Animated, Dimensions, Image, PanResponder,
+  SafeAreaView, ScrollView, FlatList, StatusBar, Platform, Easing, BackHandler,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../hooks/useAuth';
-import { apiSwipeUser, apiGetDiscoveryFeed, apiGetRequests } from '../services/api';
-import { ensureArray } from '../utils/helpers';
+import { apiSwipeUser, apiGetDiscoveryFeed, apiGetRequests, apiResetDiscovery } from '../services/api';
+import { ensureArray, formatImageUrl } from '../utils/helpers';
 
 const { width, height } = Dimensions.get('window');
 
-const PROFILES = [
-  {
-    id: 1,
-    name: 'Samirokta Rachin', age: 25, gender: 'Female', job: 'Fashion Model',
-    bio: 'Living colorfully, one outfit at a time. I believe style is a way to say who you are without having to speak. Always chasing the next adventure.',
-    location: 'New York', distance: '10 km away', compatibility: 95,
-    images: [
-      'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=900',
-      'https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=900',
-      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=900',
-    ],
-    interests: ['Fashion', 'Travel', 'Photography', 'Coffee', 'Yoga'],
-    mutuals: [
-      'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=80',
-    ],
-    tag: 'Active today',
-  },
-  {
-    id: 2,
-    name: 'Albert Flores', age: 24, gender: 'Male', job: 'Surfer & Designer',
-    bio: "Golden hour junkie. Street food enthusiast. Let's get lost somewhere beautiful.",
-    location: 'Los Angeles', distance: '4 km away', compatibility: 88,
-    images: [
-      'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=900',
-      'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=900',
-      'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=900',
-    ],
-    interests: ['Surfing', 'Design', 'Art', 'Music'],
-    mutuals: [],
-    tag: 'Active today',
-  },
-  {
-    id: 3,
-    name: 'Johnson markey', age: 26, gender: 'Male', job: 'Fitness Coach',
-    bio: 'Always focus on the grind. Hard work pays off.',
-    location: 'Miami', distance: '12 km away', compatibility: 91,
-    images: [
-      'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=900',
-      'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=900',
-      'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=900',
-    ],
-    interests: ['Fitness', 'Cooking', 'Travel'],
-    mutuals: [
-      'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=80',
-    ],
-    tag: 'Popular',
-  },
-  {
-    id: 4,
-    name: 'Camer', age: 23, gender: 'Female', job: 'Photographer',
-    bio: 'Capturing moments that last forever.',
-    location: 'San Francisco', distance: '8 km away', compatibility: 85,
-    images: [
-      'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=900',
-      'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=900',
-      'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=900',
-    ],
-    interests: ['Photography', 'Music', 'Hiking'],
-    mutuals: [],
-    tag: 'New here',
-  },
-  {
-    id: 5,
-    name: 'Sophia Carter', age: 23, gender: 'Female', job: 'Creative Director',
-    bio: 'Chasing sunsets and new adventures.',
-    location: 'Chicago', distance: '15 km away', compatibility: 92,
-    images: [
-      'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=900',
-      'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=900',
-      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=900',
-    ],
-    interests: ['Art', 'Coffee', 'Yoga'],
-    mutuals: [],
-    tag: 'Active today',
-  }
-];
-
-// Pre-cache all images
-PROFILES.forEach(p => {
-  if (p.images) {
-    p.images.forEach(img => {
-      Image.prefetch(img).catch(() => { });
-    });
-  }
-});
 
 // Varied reaction copy — a fresh one is picked each time a button is pressed
 const LIKE_MESSAGES = [
@@ -125,12 +40,12 @@ export default function DiscoverScreen() {
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [photoIdx, setPhotoIdx] = useState(0);
-  const [sheetPhotoIdx, setSheetPhotoIdx] = useState(0);
   const [showDetail, setShowDetail] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
   const [showBackgroundCards, setShowBackgroundCards] = useState(true);
   const [likeMsgIdx, setLikeMsgIdx] = useState(0);
   const [passMsgIdx, setPassMsgIdx] = useState(0);
+  const [sheetPhotoIdx, setSheetPhotoIdx] = useState(0);
 
   const cardHeightRef = useRef(height * 0.5);
 
@@ -155,6 +70,36 @@ export default function DiscoverScreen() {
 
   const sheetY = useRef(new Animated.Value(height)).current;
 
+  // Swipe-down-to-close gesture state
+  const sheetDragY = useRef(new Animated.Value(0)).current;
+  const sheetScrollY = useRef(0); // tracks ScrollView vertical offset
+
+  const sheetPanResponder = useRef(
+    PanResponder.create({
+      // Only claim the gesture when: scrolled to top AND dragging downward
+      onMoveShouldSetPanResponder: (_, gs) =>
+        sheetScrollY.current <= 0 && gs.dy > 8 && gs.dy > Math.abs(gs.dx),
+      onPanResponderGrant: () => {
+        sheetDragY.setValue(0);
+      },
+      onPanResponderMove: (_, gs) => {
+        if (gs.dy > 0) sheetDragY.setValue(gs.dy);
+      },
+      onPanResponderRelease: (_, gs) => {
+        if (gs.dy > 120 || gs.vy > 0.8) {
+          // Close — reset drag offset first then animate sheetY out
+          sheetDragY.setValue(0);
+          Animated.timing(sheetY, { toValue: height, duration: 220, useNativeDriver: false }).start(
+            () => setShowDetail(false)
+          );
+        } else {
+          // Snap back
+          Animated.spring(sheetDragY, { toValue: 0, tension: 50, friction: 9, useNativeDriver: false }).start();
+        }
+      },
+    })
+  ).current;
+
   // Active card position (only ever driven programmatically now, never by touch/drag)
   const pan = card1Pos;
   const rotate = pan.x.interpolate({
@@ -176,6 +121,7 @@ export default function DiscoverScreen() {
     if (u.avatar && !userPhotos.includes(u.avatar)) {
       userPhotos.unshift(u.avatar);
     }
+    userPhotos = userPhotos.map(url => formatImageUrl(url)).filter(Boolean);
     if (userPhotos.length === 0) {
       userPhotos = ['https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=900'];
     }
@@ -206,7 +152,7 @@ export default function DiscoverScreen() {
         apiGetRequests().catch(() => null),
       ]);
 
-      if (fRes?.profiles && Array.isArray(fRes.profiles) && fRes.profiles.length > 0) {
+      if (fRes?.profiles && Array.isArray(fRes.profiles)) {
         const formatted = fRes.profiles.map(formatApiProfile);
         setDbProfiles(formatted);
       }
@@ -240,7 +186,8 @@ export default function DiscoverScreen() {
       return filtered.length > 0 ? filtered : dbProfiles;
     }
 
-    return PROFILES.filter(p => p.gender && targetGenders.includes(p.gender.toLowerCase()));
+    // No fallback — always use real database profiles
+    return [];
   }, [dbProfiles, user]);
 
   // Get profiles for the 3 cards safely without infinite looping
@@ -269,12 +216,29 @@ export default function DiscoverScreen() {
     return unsubscribe;
   }, [navigation]);
 
+  // Intercept Android hardware back press: close the detail sheet if open
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        if (showDetailRef.current) {
+          closeDetail();
+          return true; // prevent default back navigation
+        }
+        return false; // allow default back navigation
+      };
+      const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+      return () => subscription.remove();
+    }, [])
+  );
+
   const openDetail = () => {
     setShowDetail(true);
+    sheetDragY.setValue(0);
     Animated.spring(sheetY, { toValue: 0, tension: 35, friction: 8, useNativeDriver: false }).start();
   };
 
   const closeDetail = () => {
+    sheetDragY.setValue(0);
     Animated.timing(sheetY, { toValue: height, duration: 250, useNativeDriver: false }).start(() => setShowDetail(false));
   };
 
@@ -348,8 +312,13 @@ export default function DiscoverScreen() {
           Animated.timing(likeFlashOpacity, { toValue: 0, duration: 180, useNativeDriver: false }),
         ])
       ]).start(() => {
-        // Step 3: Remove swiped user from state & auto-reload stack
-        setDbProfiles(prev => prev.filter(p => p.id !== currentP?.id));
+        setDbProfiles(prev => {
+          const nextList = prev.filter(p => p.id !== currentP?.id);
+          if (nextList.length === 0) {
+            setTimeout(() => { fetchFeed(); }, 100);
+          }
+          return nextList;
+        });
         card1Pos.setValue({ x: 0, y: 0 });
         card1Scale.setValue(0.92);
         card1Opacity.setValue(0);
@@ -436,7 +405,13 @@ export default function DiscoverScreen() {
           Animated.timing(passFlashOpacity, { toValue: 0, duration: 180, useNativeDriver: false }),
         ])
       ]).start(() => {
-        setDbProfiles(prev => prev.filter(p => p.id !== currentP?.id));
+        setDbProfiles(prev => {
+          const nextList = prev.filter(p => p.id !== currentP?.id);
+          if (nextList.length === 0) {
+            setTimeout(() => { fetchFeed(); }, 100);
+          }
+          return nextList;
+        });
         card1Pos.setValue({ x: 0, y: 0 });
         card1Scale.setValue(0.92);
         card1Opacity.setValue(0);
@@ -510,7 +485,7 @@ export default function DiscoverScreen() {
         </View>
       </SafeAreaView>
 
-      <View style={styles.mainContent}>
+      <View style={styles.mainContent} pointerEvents={showDetail ? "none" : "auto"}>
         <View style={styles.glowBlobFuchsia} pointerEvents="none" />
         <View style={styles.glowBlobCyan} pointerEvents="none" />
         <View style={styles.glowBlobPurple} pointerEvents="none" />
@@ -545,8 +520,11 @@ export default function DiscoverScreen() {
                 </Text>
                 <TouchableOpacity
                   style={styles.emptyBtn}
-                  onPress={() => {
+                  onPress={async () => {
                     setCurrentIndex(0);
+                    try {
+                      await apiResetDiscovery();
+                    } catch (_) {}
                     fetchFeed();
                   }}
                   activeOpacity={0.85}
@@ -573,7 +551,7 @@ export default function DiscoverScreen() {
                 ]
               }
             ]}>
-              <Image source={{ uri: nextNextProfile.images?.[0] || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=900' }} style={styles.cardPhoto} />
+              <Image source={{ uri: formatImageUrl(nextNextProfile.images?.[0]) }} style={styles.cardPhoto} resizeMode="cover" />
               <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.75)']} style={styles.bottomGrad} />
               <View style={styles.cardTextOverlayBottomLeft}>
                 <Text style={styles.cardProfileName}>{nextNextProfile.name}, {nextNextProfile.age}</Text>
@@ -595,7 +573,7 @@ export default function DiscoverScreen() {
                 ]
               }
             ]}>
-              <Image source={{ uri: nextProfile.images?.[0] || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=900' }} style={styles.cardPhoto} />
+              <Image source={{ uri: formatImageUrl(nextProfile.images?.[0]) }} style={styles.cardPhoto} resizeMode="cover" />
               <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.75)']} style={styles.bottomGrad} />
               <View style={styles.cardTextOverlayBottomLeft}>
                 <Text style={styles.cardProfileName}>{nextProfile.name}, {nextProfile.age}</Text>
@@ -620,9 +598,10 @@ export default function DiscoverScreen() {
             ]}
           >
             <Image
-              key={`${currentIndex}-${photoIdx}`}
-              source={{ uri: currentProfile.images[photoIdx] }}
+              key={`${currentProfile?.id || currentIndex}-${photoIdx}`}
+              source={{ uri: formatImageUrl(currentProfile.images[photoIdx]) }}
               style={styles.cardPhoto}
+              resizeMode="cover"
             />
 
             <LinearGradient colors={['rgba(0,0,0,0.15)', 'transparent']} style={styles.topGrad} />
@@ -642,15 +621,15 @@ export default function DiscoverScreen() {
 
             {/* Tap zones: left = prev photo, right = next photo. No drag. */}
             <View style={styles.tapZoneRow} pointerEvents="box-none">
-              <TouchableWithoutFeedback onPress={handlePhotoTapLeft}>
+              <Pressable onPress={handlePhotoTapLeft} style={{ flex: 1 }}>
                 <View style={styles.tapZoneSide} />
-              </TouchableWithoutFeedback>
-              <TouchableWithoutFeedback onPress={openDetail}>
+              </Pressable>
+              <Pressable onPress={openDetail} style={{ flex: 2 }}>
                 <View style={styles.tapZoneCenter} />
-              </TouchableWithoutFeedback>
-              <TouchableWithoutFeedback onPress={handlePhotoTapRight}>
+              </Pressable>
+              <Pressable onPress={handlePhotoTapRight} style={{ flex: 1 }}>
                 <View style={styles.tapZoneSide} />
-              </TouchableWithoutFeedback>
+              </Pressable>
             </View>
 
             <Animated.View style={{ opacity: detailsOpacity, width: '100%', position: 'absolute', bottom: 0 }} pointerEvents="box-none">
@@ -742,66 +721,101 @@ export default function DiscoverScreen() {
 
       {/* Detail Bottom Sheet */}
       {showDetail && (
-        <Animated.View style={[styles.detailSheet, { transform: [{ translateY: sheetY }] }]}>
-          <LinearGradient
-            colors={isDark ? ['#140E2D', '#0A051C'] : ['#F2EBFF', '#FFFFFF']}
-            style={StyleSheet.absoluteFill}
-          />
-
-          <View style={styles.sheetHandleWrap}>
-            <View style={styles.sheetHandle} />
+        <Animated.View
+          style={[styles.detailSheet, { transform: [{ translateY: Animated.add(sheetY, sheetDragY) }] }]}
+          {...sheetPanResponder.panHandlers}
+        >
+          {/* Background gradient clipped to sheet border radius */}
+          <View style={styles.detailSheetBgClip} pointerEvents="none">
+            <LinearGradient
+              colors={isDark ? ['#140E2D', '#0A051C'] : ['#F2EBFF', '#FFFFFF']}
+              style={StyleSheet.absoluteFill}
+            />
           </View>
 
           <ScrollView
             showsVerticalScrollIndicator={false}
             bounces={false}
             nestedScrollEnabled={true}
+            scrollEventThrottle={16}
+            contentContainerStyle={{ paddingBottom: 0 }}
+            onScroll={(e) => { sheetScrollY.current = e.nativeEvent.contentOffset.y; }}
           >
+            {/* Drag handle INSIDE the scroll view so it never blocks scroll */}
+            <View style={styles.sheetHandleWrap}>
+              <View style={styles.sheetHandle} />
+            </View>
+
+            {/* Sliding photo carousel */}
             <View style={styles.sheetPhotoWrap}>
               <FlatList
                 data={currentProfile.images}
-                keyExtractor={(_, i) => i.toString()}
+                keyExtractor={(item, i) => `${currentProfile?.id || 'p'}-${i}`}
                 horizontal
                 pagingEnabled
                 showsHorizontalScrollIndicator={false}
                 nestedScrollEnabled={true}
                 onMomentumScrollEnd={(e) => {
-                  const contentOffset = e.nativeEvent.contentOffset.x;
-                  const activeIndex = Math.round(contentOffset / width);
+                  const activeIndex = Math.round(e.nativeEvent.contentOffset.x / width);
                   setSheetPhotoIdx(activeIndex);
                 }}
                 renderItem={({ item }) => (
-                  <Image source={{ uri: item }} style={styles.sheetPhoto} />
+                  <Image source={{ uri: formatImageUrl(item) }} style={styles.sheetPhoto} resizeMode="cover" />
                 )}
               />
               <LinearGradient
-                colors={['transparent', theme.bgDark]}
-                style={styles.sheetPhotoGrad}
+                colors={['transparent', 'rgba(0,0,0,0.25)', 'rgba(0,0,0,0.80)']}
+                style={styles.sheetHeroGrad}
               />
-              <View style={styles.sheetPhotoDots}>
-                {currentProfile.images.map((_, i) => (
-                  <View key={i} style={[styles.sheetDot, i === sheetPhotoIdx && styles.sheetDotActive]} />
-                ))}
+              {/* Tag badge */}
+              <View style={styles.sheetHeroTag}>
+                <View style={styles.sheetTagDot} />
+                <Text style={styles.sheetTagTxt}>{currentProfile.tag}</Text>
+              </View>
+              {/* Compat badge */}
+              <View style={styles.sheetHeroCompat}>
+                <Text style={styles.sheetHeroCompatNum}>{currentProfile.compatibility}%</Text>
+                <Text style={styles.sheetHeroCompatLbl}>match</Text>
+              </View>
+              {/* Pagination dots */}
+              {currentProfile.images.length > 1 && (
+                <View style={styles.sheetPhotoDots}>
+                  {currentProfile.images.map((_, i) => (
+                    <View key={i} style={[styles.sheetDot, i === sheetPhotoIdx && styles.sheetDotActive]} />
+                  ))}
+                </View>
+              )}
+              {/* Name overlay */}
+              <View style={styles.sheetHeroNameWrap}>
+                <Text style={styles.sheetHeroName}>{currentProfile.name}, {currentProfile.age}</Text>
+                <Text style={styles.sheetHeroSub}>{currentProfile.job}</Text>
               </View>
             </View>
 
             <View style={styles.sheetBody}>
-              <View style={styles.sheetNameRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.sheetName}>{currentProfile.name}, {currentProfile.age}</Text>
-                  <Text style={styles.sheetJob}>{currentProfile.job} · {currentProfile.distance}</Text>
+              {/* Quick-fact chips */}
+              <View style={styles.quickFactsRow}>
+                <View style={styles.quickFact}>
+                  <Ionicons name="location-outline" size={14} color="#FF007F" />
+                  <Text style={styles.quickFactTxt}>{currentProfile.location}</Text>
                 </View>
-                <View style={styles.sheetCompatBadge}>
-                  <Text style={styles.sheetCompatNum}>{currentProfile.compatibility}%</Text>
-                  <Text style={styles.sheetCompatLbl}>match</Text>
+                <View style={styles.quickFact}>
+                  <Ionicons name="navigate-outline" size={14} color="#8A66FF" />
+                  <Text style={styles.quickFactTxt}>{currentProfile.distance}</Text>
+                </View>
+                <View style={styles.quickFact}>
+                  <Ionicons name={currentProfile.gender?.toLowerCase().includes('female') ? 'woman-outline' : 'man-outline'} size={14} color="#4A89FF" />
+                  <Text style={styles.quickFactTxt}>{currentProfile.gender}</Text>
                 </View>
               </View>
 
+              {/* About */}
               <View style={styles.sheetCard}>
                 <Text style={styles.sheetCardLabel}>ABOUT</Text>
                 <Text style={styles.sheetBio}>{currentProfile.bio}</Text>
               </View>
 
+              {/* Interests */}
               <View style={styles.sheetCard}>
                 <Text style={styles.sheetCardLabel}>INTERESTS</Text>
                 <View style={styles.tagsRow}>
@@ -813,6 +827,42 @@ export default function DiscoverScreen() {
                 </View>
               </View>
 
+              {/* Lifestyle snapshot */}
+              <View style={styles.sheetCard}>
+                <Text style={styles.sheetCardLabel}>LIFESTYLE</Text>
+                <View style={styles.lifestyleGrid}>
+                  <View style={styles.lifestyleItem}>
+                    <View style={styles.lifestyleIcon}>
+                      <Ionicons name="heart-outline" size={18} color="#FF007F" />
+                    </View>
+                    <Text style={styles.lifestyleLbl}>Looking for</Text>
+                    <Text style={styles.lifestyleVal}>Relationship</Text>
+                  </View>
+                  <View style={styles.lifestyleItem}>
+                    <View style={styles.lifestyleIcon}>
+                      <Ionicons name="fitness-outline" size={18} color="#8A66FF" />
+                    </View>
+                    <Text style={styles.lifestyleLbl}>Exercise</Text>
+                    <Text style={styles.lifestyleVal}>Active</Text>
+                  </View>
+                  <View style={styles.lifestyleItem}>
+                    <View style={styles.lifestyleIcon}>
+                      <Ionicons name="wine-outline" size={18} color="#4A89FF" />
+                    </View>
+                    <Text style={styles.lifestyleLbl}>Drinks</Text>
+                    <Text style={styles.lifestyleVal}>Socially</Text>
+                  </View>
+                  <View style={styles.lifestyleItem}>
+                    <View style={styles.lifestyleIcon}>
+                      <Ionicons name="star-outline" size={18} color="#FFB800" />
+                    </View>
+                    <Text style={styles.lifestyleLbl}>Zodiac</Text>
+                    <Text style={styles.lifestyleVal}>Explore</Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Mutual friends */}
               {ensureArray(currentProfile.mutuals).length > 0 && (
                 <View style={styles.sheetCard}>
                   <Text style={styles.sheetCardLabel}>MUTUAL FRIENDS</Text>
@@ -827,17 +877,7 @@ export default function DiscoverScreen() {
                 </View>
               )}
 
-              <View style={styles.sheetCard}>
-                <Text style={styles.sheetCardLabel}>GALLERY</Text>
-                <View style={styles.sheetGalleryGrid}>
-                  {ensureArray(currentProfile.images).map((img, i) => (
-                    <View key={i} style={styles.sheetGalleryItem}>
-                      <Image source={{ uri: img }} style={styles.sheetGalleryImg} />
-                    </View>
-                  ))}
-                </View>
-              </View>
-
+              {/* Actions */}
               <View style={styles.sheetActions}>
                 <TouchableOpacity
                   style={styles.sheetBtnPass}
@@ -860,12 +900,6 @@ export default function DiscoverScreen() {
               <View style={{ height: 110 }} />
             </View>
           </ScrollView>
-
-          <TouchableOpacity style={styles.sheetCloseBtn} onPress={closeDetail}>
-            <View style={styles.sheetCloseBtnInner}>
-              <Ionicons name="chevron-down" size={20} color={theme.textPrimary} />
-            </View>
-          </TouchableOpacity>
         </Animated.View>
       )}
     </LinearGradient>
@@ -983,6 +1017,64 @@ const getStyles = (theme) => StyleSheet.create({
     alignSelf: 'center',
     position: 'relative',
   },
+  emptyWrap: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyCard: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 36,
+    padding: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: theme.glass || 'rgba(255, 255, 255, 0.85)',
+    borderWidth: 1,
+    borderColor: theme.border || 'rgba(255, 255, 255, 0.3)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  emptyTitle: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: theme.textPrimary,
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  emptySub: {
+    fontSize: 13.5,
+    color: theme.textSec,
+    marginTop: 8,
+    textAlign: 'center',
+    lineHeight: 20,
+    paddingHorizontal: 10,
+  },
+  emptyBtn: {
+    marginTop: 24,
+    borderRadius: 24,
+    overflow: 'hidden',
+    shadowColor: '#FF007F',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  emptyBtnGrad: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
+  emptyBtnTxt: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '800',
+  },
   card: {
     position: 'absolute',
     width: '100%',
@@ -1010,7 +1102,6 @@ const getStyles = (theme) => StyleSheet.create({
     left: 0,
     width: '100%',
     height: '100%',
-    resizeMode: 'cover',
   },
   topGrad: {
     position: 'absolute',
@@ -1220,16 +1311,24 @@ const getStyles = (theme) => StyleSheet.create({
     bottom: 0,
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
-    overflow: 'hidden',
+    // No overflow:hidden — it clips Android scroll gesture recognition
     zIndex: 100,
   },
-  sheetHandleWrap: {
+  detailSheetBgClip: {
     position: 'absolute',
-    top: 24,
+    top: 0,
     left: 0,
     right: 0,
+    bottom: 0,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    overflow: 'hidden',
+  },
+  sheetHandleWrap: {
+    // Inside ScrollView — not absolutely positioned, so no touch interception
+    paddingTop: 14,
+    paddingBottom: 10,
     alignItems: 'center',
-    zIndex: 20,
   },
   sheetHandle: {
     width: 44,
@@ -1279,8 +1378,8 @@ const getStyles = (theme) => StyleSheet.create({
   },
 
   sheetBody: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingHorizontal: 16,
+    paddingTop: 16,
   },
   sheetNameRow: {
     flexDirection: 'row',
@@ -1442,22 +1541,182 @@ const getStyles = (theme) => StyleSheet.create({
     elevation: 2,
   },
 
-  sheetGalleryGrid: {
+  // Photo slider carousel
+  sheetPhotoWrap: {
+    height: height * 0.52,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  sheetPhoto: {
+    width,
+    height: height * 0.52,
+  },
+  sheetPhotoDots: {
+    position: 'absolute',
+    bottom: 60,           // above the name overlay
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 5,
+    zIndex: 10,
+  },
+  sheetDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.45)',
+  },
+  sheetDotActive: {
+    width: 18,
+    borderRadius: 3,
+    backgroundColor: '#FFFFFF',
+  },
+
+  // Hero overlay helpers (positioned inside sheetPhotoWrap)
+  sheetHeroWrap: {
+    height: height * 0.52,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  sheetHeroPhoto: {
+    width: '100%',
+    height: '100%',
+  },
+  sheetHeroGrad: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '65%',
+  },
+  sheetHeroTag: {
+    position: 'absolute',
+    top: 16,
+    left: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+  },
+  sheetTagDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#30D158',
+  },
+  sheetTagTxt: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  sheetHeroCompat: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    backgroundColor: 'rgba(255,55,95,0.85)',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    alignItems: 'center',
+  },
+  sheetHeroCompatNum: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '900',
+    lineHeight: 18,
+  },
+  sheetHeroCompatLbl: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  sheetHeroNameWrap: {
+    position: 'absolute',
+    bottom: 18,
+    left: 18,
+    right: 18,
+  },
+  sheetHeroName: {
+    color: '#fff',
+    fontSize: 28,
+    fontWeight: '900',
+    letterSpacing: -0.5,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  sheetHeroSub: {
+    color: 'rgba(255,255,255,0.80)',
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+
+  // Quick facts
+  quickFactsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginTop: 4,
+    marginBottom: 14,
   },
-  sheetGalleryItem: {
-    width: (width - 56) / 3,
-    height: (width - 56) / 3,
-    borderRadius: 12,
-    overflow: 'hidden',
+  quickFact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: theme.isDark ? '#1C1236' : '#F2EBFF',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: theme.border,
   },
-  sheetGalleryImg: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
+  quickFactTxt: {
+    color: theme.textPrimary,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  // Lifestyle grid
+  lifestyleGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  lifestyleItem: {
+    width: '46%',
+    backgroundColor: theme.isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+    borderRadius: 14,
+    padding: 12,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  lifestyleIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: theme.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  lifestyleLbl: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: theme.textFaint,
+    letterSpacing: 0.5,
+  },
+  lifestyleVal: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: theme.textPrimary,
   },
 
   // Premium empty state

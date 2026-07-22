@@ -1,6 +1,7 @@
 // src/services/api.js — HeartLink API Service Client Bridge for Laravel Backend
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system';
 
 import Constants from 'expo-constants';
 
@@ -38,6 +39,17 @@ const getHostCandidates = () => {
   return Array.from(new Set(hosts));
 };
 
+export const getActiveServerBaseUrl = () => {
+  if (activeWorkingHost) {
+    return activeWorkingHost.replace('/api/v1', '');
+  }
+  const candidates = getHostCandidates();
+  if (candidates.length > 0) {
+    return candidates[0].replace('/api/v1', '');
+  }
+  return 'http://localhost:8000';
+};
+
 export const setAuthToken = (token) => {
   userToken = token;
 };
@@ -56,20 +68,27 @@ const _preloadToken = async () => {
 _preloadToken();
 
 export const apiFetch = async (endpoint, options = {}) => {
+  const isFormData = options.body instanceof FormData;
   const headers = {
-    'Content-Type': 'application/json',
     'Accept': 'application/json',
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     ...(userToken ? { 'Authorization': `Bearer ${userToken}` } : {}),
     ...options.headers,
   };
+
+  if (isFormData && headers['Content-Type']) {
+    delete headers['Content-Type'];
+  }
 
   const config = {
     ...options,
     headers,
   };
 
-  if (options.body && typeof options.body === 'object') {
+  if (options.body && typeof options.body === 'object' && !isFormData) {
     config.body = JSON.stringify(options.body);
+  } else if (isFormData) {
+    config.body = options.body;
   }
 
   const hosts = getHostCandidates();
@@ -102,6 +121,49 @@ export const apiFetch = async (endpoint, options = {}) => {
   throw lastError || new Error('Unable to connect to Laravel backend');
 };
 
+// ─── Image Upload Helper ─────────────────────────────────────────────
+export const apiUploadImage = async (imageUri) => {
+  if (!imageUri || typeof imageUri !== 'string') return imageUri;
+
+  // If already an HTTP / HTTPS URL, return as is
+  if (imageUri.startsWith('http://') || imageUri.startsWith('https://')) {
+    return imageUri;
+  }
+
+  try {
+    let base64Data = null;
+
+    if (Platform.OS === 'web') {
+      const response = await fetch(imageUri);
+      const blob = await response.blob();
+      base64Data = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } else {
+      const base64Str = await FileSystem.readAsStringAsync(imageUri, {
+        encoding: 'base64',
+      });
+      const ext = imageUri.split('.').pop() || 'jpg';
+      base64Data = `data:image/${ext};base64,${base64Str}`;
+    }
+
+    if (!base64Data) return imageUri;
+
+    const res = await apiFetch('/upload-image', {
+      method: 'POST',
+      body: { image: base64Data },
+    });
+
+    return res?.url || imageUri;
+  } catch (err) {
+    console.warn('[Upload Image Warning]:', err?.message);
+    return imageUri;
+  }
+};
+
 // ─── Auth API ────────────────────────────────────────────────────────
 export const apiRegister = (userData) => apiFetch('/auth/register', { method: 'POST', body: userData });
 export const apiLogin    = (credentials) => apiFetch('/auth/login', { method: 'POST', body: credentials });
@@ -111,6 +173,7 @@ export const apiUpdateProfile = (data) => apiFetch('/user/profile', { method: 'P
 
 // ─── Discovery & Swiping API ─────────────────────────────────────────
 export const apiGetDiscoveryFeed = () => apiFetch('/discover');
+export const apiResetDiscovery    = () => apiFetch('/discover/reset', { method: 'POST' });
 export const apiSwipeUser = (swipedUserId, type) => apiFetch('/discover/swipe', {
   method: 'POST',
   body: { swiped_user_id: swipedUserId, type },

@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { apiGetConversations } from '../services/api';
+import { formatImageUrl } from '../utils/helpers';
 
 const { width, height } = Dimensions.get('window');
 
@@ -33,7 +34,7 @@ export default function ChatScreen() {
           unread: c.unread_count || 0,
           online: (bool => bool)(c.online),
           lastMsg: c.last_msg || 'Matched! Start chatting now.',
-          image: c.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400',
+          image: formatImageUrl(c.avatar),
           user: c.user,
           lastTimestamp: c.last_timestamp || 0,
         }));

@@ -10,7 +10,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import ProfileDetail from '../components/discovery/ProfileDetail';
 import { apiGetMatches, apiGetRequests } from '../services/api';
-import { ensureArray } from '../utils/helpers';
+import { ensureArray, formatImageUrl } from '../utils/helpers';
 
 const { width, height } = Dimensions.get('window');
 
@@ -31,12 +31,17 @@ export default function MatchesScreen() {
       if (mRes?.matches && Array.isArray(mRes.matches)) {
         const apiList = mRes.matches.map(m => {
           const u = m.user || {};
+          const rawImg = u.avatar || (u.photos && u.photos[0]?.photo_url) || '';
+          const rawPhotos = ensureArray(u.photos?.map(p => (typeof p === 'string' ? p : p.photo_url || p.uri)).filter(Boolean));
+          if (u.avatar && !rawPhotos.includes(u.avatar)) rawPhotos.unshift(u.avatar);
+          const formattedPhotos = rawPhotos.map(p => formatImageUrl(p)).filter(Boolean);
+
           return {
             id: u.id,
             name: u.name || 'Match',
             age: u.age || 24,
-            image: u.avatar || (u.photos && u.photos[0]?.photo_url) || 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=500',
-            images: ensureArray(u.photos?.map(p => (typeof p === 'string' ? p : p.photo_url || p.uri)).filter(Boolean), [u.avatar || 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=500']),
+            image: formatImageUrl(rawImg),
+            images: formattedPhotos.length > 0 ? formattedPhotos : ['https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=500'],
             interests: ensureArray(u.interests, ['Travel', 'Music', 'Photography']),
             matchedAt: 'Recently',
             compatibility: u.compatibility_score || 90,

@@ -160,6 +160,52 @@ class AuthController extends Controller
         ]);
     }
 
+    public function uploadImage(Request $request)
+    {
+        $imageUrl = null;
+
+        if ($request->hasFile('image')) {
+            $file = $request->file('image');
+            $extension = $file->getClientOriginalExtension() ?: 'jpg';
+            $filename = time() . '_' . \Illuminate\Support\Str::random(10) . '.' . $extension;
+
+            $uploadPath = public_path('uploads');
+            if (!file_exists($uploadPath)) {
+                mkdir($uploadPath, 0777, true);
+            }
+            $file->move($uploadPath, $filename);
+
+            $imageUrl = $request->schemeAndHttpHost() . '/uploads/' . $filename;
+        } elseif ($request->has('image') && is_string($request->input('image'))) {
+            $raw = $request->input('image');
+            $ext = 'jpg';
+            if (preg_match('/^data:image\/(\w+);base64,/', $raw, $type)) {
+                $raw = substr($raw, strpos($raw, ',') + 1);
+                $ext = strtolower($type[1]);
+                if ($ext === 'jpeg') $ext = 'jpg';
+            }
+            $data = base64_decode($raw);
+            if ($data !== false) {
+                $filename = time() . '_' . \Illuminate\Support\Str::random(10) . '.' . $ext;
+                $uploadPath = public_path('uploads');
+                if (!file_exists($uploadPath)) {
+                    mkdir($uploadPath, 0777, true);
+                }
+                file_put_contents($uploadPath . '/' . $filename, $data);
+                $imageUrl = $request->schemeAndHttpHost() . '/uploads/' . $filename;
+            }
+        }
+
+        if (!$imageUrl) {
+            return response()->json(['message' => 'No image file provided'], 422);
+        }
+
+        return response()->json([
+            'message' => 'Image uploaded successfully',
+            'url'     => $imageUrl,
+        ]);
+    }
+
     public function logout(Request $request)
     {
         $request->user()->currentAccessToken()->delete();

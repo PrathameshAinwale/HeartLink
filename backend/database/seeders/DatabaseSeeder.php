@@ -425,6 +425,7 @@ class DatabaseSeeder extends Seeder
                 'description' => 'Panoramic skyline views, crafted botanical cocktails, and live jazz vibes under starry skies. Perfect for a first date or anniversary.',
                 'price_range' => '$$$',
                 'map_url'     => 'https://maps.google.com/?q=LUMA+Rooftop+Chicago',
+                'is_boosted'  => true,
             ],
             [
                 'name'        => 'Aura Garden Bistro',
