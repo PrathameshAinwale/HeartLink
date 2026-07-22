@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Pressable,
-  Animated, Dimensions, Image, PanResponder,
+  Animated, Dimensions, Image, PanResponder, ActivityIndicator,
   SafeAreaView, ScrollView, FlatList, StatusBar, Platform, Easing, BackHandler,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -49,6 +49,7 @@ export default function DiscoverScreen() {
   const [passMsgIdx, setPassMsgIdx] = useState(0);
   const [sheetPhotoIdx, setSheetPhotoIdx] = useState(0);
   const [rewindModalVisible, setRewindModalVisible] = useState(false);
+  const [feedLoading, setFeedLoading] = useState(true);
 
   const { user } = useAuth();
   const [dbProfiles, setDbProfiles] = useState([]);
@@ -208,6 +209,7 @@ export default function DiscoverScreen() {
 
   const fetchFeed = async () => {
     try {
+      setFeedLoading(true);
       const [fRes, rRes] = await Promise.all([
         apiGetDiscoveryFeed().catch(() => null),
         apiGetRequests().catch(() => null),
@@ -216,6 +218,8 @@ export default function DiscoverScreen() {
       if (fRes?.profiles && Array.isArray(fRes.profiles)) {
         const formatted = fRes.profiles.map(formatApiProfile);
         setDbProfiles(formatted);
+        setCurrentIndex(0);
+        resetCardPositions();
       }
 
       if (rRes?.requests && Array.isArray(rRes.requests)) {
@@ -225,6 +229,8 @@ export default function DiscoverScreen() {
       }
     } catch (err) {
       console.warn('Discovery Feed fetch error:', err?.message);
+    } finally {
+      setFeedLoading(false);
     }
   };
 
@@ -305,7 +311,7 @@ export default function DiscoverScreen() {
   };
 
   const openDetail = () => {
-    if (isAnimating) return;
+    if (isAnimating || !currentProfile) return;
     setShowDetail(true);
   };
 
@@ -383,13 +389,7 @@ export default function DiscoverScreen() {
           Animated.timing(likeFlashOpacity, { toValue: 0, duration: 180, useNativeDriver: false }),
         ])
       ]).start(() => {
-        setDbProfiles(prev => {
-          const nextList = prev.filter(p => p.id !== currentP?.id);
-          if (nextList.length === 0) {
-            setTimeout(() => { fetchFeed(); }, 100);
-          }
-          return nextList;
-        });
+        setDbProfiles(prev => prev.filter(p => p.id !== currentP?.id));
         card1Pos.setValue({ x: 0, y: 0 });
         card1Scale.setValue(0.92);
         card1Opacity.setValue(0);
@@ -476,13 +476,7 @@ export default function DiscoverScreen() {
           Animated.timing(passFlashOpacity, { toValue: 0, duration: 180, useNativeDriver: false }),
         ])
       ]).start(() => {
-        setDbProfiles(prev => {
-          const nextList = prev.filter(p => p.id !== currentP?.id);
-          if (nextList.length === 0) {
-            setTimeout(() => { fetchFeed(); }, 100);
-          }
-          return nextList;
-        });
+        setDbProfiles(prev => prev.filter(p => p.id !== currentP?.id));
         card1Pos.setValue({ x: 0, y: 0 });
         card1Scale.setValue(0.92);
         card1Opacity.setValue(0);
@@ -554,7 +548,7 @@ export default function DiscoverScreen() {
         </View>
       </SafeAreaView>
 
-      <View style={styles.mainContent} pointerEvents={showDetail ? "none" : "auto"}>
+      <View style={styles.mainContent} pointerEvents={(showDetail || feedLoading) ? "none" : "auto"}>
         <View style={styles.glowBlobFuchsia} pointerEvents="none" />
         <View style={styles.glowBlobCyan} pointerEvents="none" />
         <View style={styles.glowBlobPurple} pointerEvents="none" />
@@ -580,44 +574,56 @@ export default function DiscoverScreen() {
           }}
         >
           {!currentProfile || activeProfiles.length === 0 ? (
-            <View style={styles.emptyWrap}>
-              <View style={styles.emptyCard}>
-                <View style={styles.emptyIconWrap}>
-                  <Ionicons name="sparkles-outline" size={48} color="#FF007F" />
-                </View>
-
-                <Text style={styles.emptyTitle}>You've Swiped All Profiles!</Text>
-                <Text style={styles.emptySub}>
-                  You've explored all nearby matches in your area. Reload your feed to view swiped profiles again, or upgrade your subscription plan for unlimited Passport reach!
-                </Text>
-
-                <TouchableOpacity
-                  style={styles.emptyBtn}
-                  onPress={async () => {
-                    setCurrentIndex(0);
-                    try {
-                      await apiResetDiscovery();
-                    } catch (_) { }
-                    fetchFeed();
-                  }}
-                  activeOpacity={0.85}
-                >
-                  <LinearGradient colors={['#FF007F', '#B5179E']} style={styles.emptyBtnGrad}>
-                    <Ionicons name="refresh-outline" size={18} color="#FFF" style={{ marginRight: 6 }} />
-                    <Text style={styles.emptyBtnTxt}>Reload Swiped Feed</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.emptySecondaryBtn}
-                  onPress={() => navigation.navigate('Plans')}
-                  activeOpacity={0.85}
-                >
-                  <Ionicons name="sparkles-outline" size={16} color="#FF007F" style={{ marginRight: 6 }} />
-                  <Text style={styles.emptySecondaryTxt}>Upgrade Plan for Worldwide Reach</Text>
-                </TouchableOpacity>
+            feedLoading ? (
+              <View style={styles.emptyWrap} pointerEvents="none">
+                <ActivityIndicator size="large" color="#FF007F" />
               </View>
-            </View>
+            ) : (
+              <View style={styles.emptyWrap}>
+                <View style={styles.emptyCard}>
+                  <View style={styles.emptyIconWrap}>
+                    <Ionicons name="sparkles-outline" size={48} color="#FF007F" />
+                  </View>
+
+                  <Text style={styles.emptyTitle}>You've Swiped All Profiles!</Text>
+                  <Text style={styles.emptySub}>
+                    You've explored all nearby matches in your area. Reload your feed to view swiped profiles again, or upgrade your subscription plan for unlimited Passport reach!
+                  </Text>
+
+                  <TouchableOpacity
+                    style={styles.emptyBtn}
+                    onPress={async () => {
+                      try {
+                        setFeedLoading(true);
+                        await apiResetDiscovery();
+                        await fetchFeed();
+                      } catch (err) {
+                        console.warn('Reload feed error:', err);
+                      } finally {
+                        setCurrentIndex(0);
+                        resetCardPositions();
+                        setFeedLoading(false);
+                      }
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <LinearGradient colors={['#FF007F', '#B5179E']} style={styles.emptyBtnGrad}>
+                      <Ionicons name="refresh-outline" size={18} color="#FFF" style={{ marginRight: 6 }} />
+                      <Text style={styles.emptyBtnTxt}>Reload Swiped Feed</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.emptySecondaryBtn}
+                    onPress={() => navigation.navigate('Plans')}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="sparkles-outline" size={16} color="#FF007F" style={{ marginRight: 6 }} />
+                    <Text style={styles.emptySecondaryTxt}>Upgrade Plan for Worldwide Reach</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )
           ) : (
             <>
               {/* Card 3 (Back-most) - Hidden during transition */}
@@ -775,57 +781,61 @@ export default function DiscoverScreen() {
           )}
         </View>
 
-        {/* Actions Row */}
-        <View style={styles.actionsRowContainer}>
-          <TouchableOpacity
-            onPress={moveToPrevious}
-            activeOpacity={0.8}
-            style={styles.actionBtnSmallX}
-            disabled={isAnimating}
-          >
-            <Ionicons name="close" size={24} color="#fff" />
-          </TouchableOpacity>
+        {/* Actions Row (Only visible when active profiles exist) */}
+        {currentProfile && activeProfiles.length > 0 && (
+          <View style={styles.actionsRowContainer}>
+            <TouchableOpacity
+              onPress={moveToPrevious}
+              activeOpacity={0.8}
+              style={styles.actionBtnSmallX}
+              disabled={isAnimating}
+            >
+              <Ionicons name="close" size={24} color="#fff" />
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={() => navigation.navigate('Plans')}
-            activeOpacity={0.8}
-            style={styles.actionBtnLargeLightning}
-          >
-            <LinearGradient
-              colors={['#FF007F', '#B5179E']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
-            <Ionicons name="flash" size={28} color="#fff" />
-          </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('Plans')}
+              activeOpacity={0.8}
+              style={styles.actionBtnLargeLightning}
+            >
+              <LinearGradient
+                colors={['#FF007F', '#B5179E']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+              <Ionicons name="flash" size={28} color="#fff" />
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={moveToNext}
-            activeOpacity={0.8}
-            style={styles.actionBtnSmallHeart}
-            disabled={isAnimating}
-          >
-            <Ionicons name="heart" size={24} color="#fff" />
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              onPress={moveToNext}
+              activeOpacity={0.8}
+              style={styles.actionBtnSmallHeart}
+              disabled={isAnimating}
+            >
+              <Ionicons name="heart" size={24} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {/* Unified Profile Detail Modal across Discover, Matches & Chat */}
-      <ProfileDetail
-        visible={showDetail}
-        profile={currentProfile}
-        onClose={closeDetail}
-        onLike={() => {
-          closeDetail();
-          moveToNext();
-        }}
-        onPass={() => {
-          closeDetail();
-          moveToPrevious();
-        }}
-        isMatch={false}
-      />
+      {showDetail && currentProfile && (
+        <ProfileDetail
+          visible={showDetail}
+          profile={currentProfile}
+          onClose={closeDetail}
+          onLike={() => {
+            closeDetail();
+            moveToNext();
+          }}
+          onPass={() => {
+            closeDetail();
+            moveToPrevious();
+          }}
+          isMatch={false}
+        />
+      )}
 
       <CustomAlertModal
         visible={rewindModalVisible}
@@ -968,17 +978,16 @@ const getStyles = (theme) => StyleSheet.create({
   },
   emptyCard: {
     width: '100%',
-    height: '100%',
-    borderRadius: 36,
-    padding: 24,
+    borderRadius: 32,
+    padding: 28,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: theme.glass || 'rgba(255, 255, 255, 0.85)',
-    borderWidth: 1,
-    borderColor: theme.border || 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: theme.isDark ? '#1C1236' : '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: theme.isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.15,
     shadowRadius: 16,
     elevation: 8,
   },
@@ -1366,6 +1375,7 @@ const getStyles = (theme) => StyleSheet.create({
     right: 0,
     flexDirection: 'row',
     justifyContent: 'center',
+    alignItems: 'center',
     gap: 6,
     zIndex: 10,
   },
@@ -1546,38 +1556,6 @@ const getStyles = (theme) => StyleSheet.create({
     elevation: 2,
   },
 
-  // Photo slider carousel
-  sheetPhotoWrap: {
-    height: height * 0.52,
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  sheetPhoto: {
-    width,
-    height: height * 0.52,
-  },
-  sheetPhotoDots: {
-    position: 'absolute',
-    bottom: 60,           // above the name overlay
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 5,
-    zIndex: 10,
-  },
-  sheetDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.45)',
-  },
-  sheetDotActive: {
-    width: 18,
-    borderRadius: 3,
-    backgroundColor: '#FFFFFF',
-  },
-
   // Hero overlay helpers (positioned inside sheetPhotoWrap)
   sheetHeroWrap: {
     height: height * 0.52,
@@ -1722,35 +1700,5 @@ const getStyles = (theme) => StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: theme.textPrimary,
-  },
-
-  // Premium empty state
-  emptyWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30 },
-  emptyCard: {
-    backgroundColor: theme.glass, borderRadius: 24, padding: 32,
-    alignItems: 'center', gap: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-  },
-  emptyTitle: { fontSize: 20, fontWeight: '800', color: theme.textPrimary },
-  emptySub: { fontSize: 14, color: theme.textSec, textAlign: 'center', lineHeight: 21 },
-  emptyBtn: {
-    marginTop: 10,
-    borderRadius: 22,
-    overflow: 'hidden',
-  },
-  emptyBtnGrad: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 22,
-  },
-  emptyBtnTxt: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '800',
   },
 });

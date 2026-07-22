@@ -76,7 +76,7 @@ export default function ProfileDetail({ visible, profile, onClose, onLike, onPas
     })
   ).current;
 
-  if (!profile) return null;
+  if (!profile || !visible) return null;
 
   const rawPhotos = profile.images && profile.images.length > 0
     ? profile.images

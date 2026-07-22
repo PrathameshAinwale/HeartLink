@@ -55,8 +55,8 @@ export const LIGHT_THEME = {
   bgDark:       '#E2DBF5',
 
   // ─── Glass surfaces ─────────────────────────────────────────────────────────
-  glass:        'rgba(0, 0, 0, 0)',
-  glassMid:     'rgba(0, 0, 0, 0)',
+  glass:        'rgba(255, 255, 255, 0.85)',
+  glassMid:     'rgba(255, 255, 255, 0.92)',
   glassHigh:    'rgba(0,0,0,0.12)',
   glassWhite:   'rgba(255,255,255,0.60)',
   glassDark:    'rgba(255,255,255,0.45)', // inverted for light glass button on top of images
