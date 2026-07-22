@@ -13,7 +13,9 @@ class User extends Authenticatable
 
     protected $fillable = [
         'name',
+        'display_name',
         'email',
+        'country_code',
         'password',
         'age',
         'dob',
@@ -21,9 +23,23 @@ class User extends Authenticatable
         'bio',
         'job',
         'avatar',
+        'video_intro_url',
         'city',
         'state',
         'country',
+        'pincode',
+        'mother_tongue',
+        'languages_spoken',
+        'religion',
+        'marital_status',
+        'education',
+        'occupation',
+        'diet',
+        'zodiac_sign',
+        'drinking',
+        'smoking',
+        'clubbing',
+        'exercise',
         'relationship_type',
         'age_min',
         'age_max',
@@ -46,6 +62,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'is_online' => 'boolean',
             'interests' => 'array',
+            'languages_spoken' => 'array',
         ];
     }
 

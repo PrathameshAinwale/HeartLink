@@ -18,9 +18,13 @@ export default function CustomAlertModal({
   cancelText,
   onConfirm,
   onCancel,
+  onClose,
   isDanger = false,
 }) {
   const { theme, isDark } = useTheme();
+
+  const handleConfirm = onConfirm || onClose;
+  const handleCancel = onCancel || onClose || handleConfirm;
 
   if (!visible) return null;
 
@@ -48,14 +52,14 @@ export default function CustomAlertModal({
             {!!cancelText && (
               <TouchableOpacity
                 style={[styles.btn, styles.cancelBtn, { borderColor: theme.border, backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }]}
-                onPress={onCancel}
+                onPress={handleCancel}
                 activeOpacity={0.8}
               >
                 <Text style={[styles.cancelTxt, { color: theme.textSec }]}>{cancelText}</Text>
               </TouchableOpacity>
             )}
 
-            <TouchableOpacity style={[styles.btn, styles.confirmBtn]} onPress={onConfirm} activeOpacity={0.8}>
+            <TouchableOpacity style={[styles.btn, styles.confirmBtn]} onPress={handleConfirm} activeOpacity={0.8}>
               <LinearGradient
                 colors={isDanger ? ['#FF375F', '#D00040'] : ['#FF007F', '#B5179E']}
                 style={styles.grad}

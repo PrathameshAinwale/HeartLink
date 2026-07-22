@@ -9,6 +9,7 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   StatusBar,
   Dimensions,
   Modal,
@@ -53,6 +54,29 @@ const REPORT_REASONS = [
   'Harassment or unwanted behavior',
   'Scam or commercial activity',
   'Other reason',
+];
+
+const EMOJI_CATEGORIES = [
+  {
+    name: 'Love',
+    icon: '❤️',
+    emojis: ['❤️', '💕', '✨', '😍', '🔥', '😘', '💖', '🥰', '🌹', '💫', '🥂', '💘', '💗', '💓', '👩‍❤️‍👨', '💋'],
+  },
+  {
+    name: 'Vibes',
+    icon: '😂',
+    emojis: ['😂', '😊', '🙈', '😜', '🙌', '😎', '🤩', '💃', '🕺', '🥳', '🎉', '💯', '😇', '😋', '👻', '🥳'],
+  },
+  {
+    name: 'Hearts',
+    icon: '🫶',
+    emojis: ['👍', '🙏', '🫶', '✌️', '🤝', '💜', '💙', '💚', '💛', '🤍', '💝', '💖', '❤️‍🔥', '👏', '👌', '⚡'],
+  },
+  {
+    name: 'Life',
+    icon: '☕',
+    emojis: ['☕', '🍕', '🍦', '🍷', '🎵', '✈️', '🌟', '🎈', '🌸', '🌈', '🌙', '💌', '🍾', '🍿', '🎸', '🏖️'],
+  },
 ];
 
 // Sample messages for fallback
@@ -102,20 +126,27 @@ const messagesAreEqual = (a, b) => {
   return true;
 };
 
-// Memoized message bubble with a soft fade + rise entrance animation. Since
-// FlatList reuses item identity via keyExtractor, this effect only fires
-// once per message — the first time it mounts — giving new messages a
-// gentle "arrive" motion instead of popping in instantly.
+const REACTION_EMOJIS = ['❤️', '😂', '😮', '😢', '🙏', '👍'];
+
+// Memoized message bubble with Double-Tap (Instagram heart) and Long-Press (WhatsApp reaction bar)
 const MessageBubble = React.memo(function MessageBubble({
   item,
   theme,
   styles,
   avatarUri,
   onAvatarPress,
+  onReact,
+  activeReactionMsgId,
+  onOpenReactionMenu,
+  onCloseReactionMenu,
 }) {
   const isMe = item.sender === 'me';
   const fade = useRef(new Animated.Value(0)).current;
   const rise = useRef(new Animated.Value(10)).current;
+  const heartPop = useRef(new Animated.Value(0)).current;
+  const lastTapRef = useRef(0);
+
+  const isMenuOpen = activeReactionMsgId === item.id;
 
   useEffect(() => {
     Animated.parallel([
@@ -132,45 +163,123 @@ const MessageBubble = React.memo(function MessageBubble({
         stiffness: 180,
       }),
     ]).start();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const handleBubblePress = () => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 300) {
+      // Instagram style double-tap: react with Heart ❤️
+      onReact(item.id, '❤️');
+      heartPop.setValue(0);
+      Animated.sequence([
+        Animated.spring(heartPop, { toValue: 1.4, friction: 3, useNativeDriver: true }),
+        Animated.timing(heartPop, { toValue: 0, duration: 350, useNativeDriver: true }),
+      ]).start();
+    } else {
+      if (isMenuOpen) onCloseReactionMenu();
+    }
+    lastTapRef.current = now;
+  };
+
+  const handleLongPress = () => {
+    onOpenReactionMenu(item.id);
+  };
+
   return (
-    <Animated.View
-      style={[
-        styles.msgRow,
-        isMe && styles.msgRowMe,
-        { opacity: fade, transform: [{ translateY: rise }] },
-      ]}
-    >
-      {!isMe && (
-        <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.8}>
-          <Image source={{ uri: avatarUri }} style={styles.msgAvatar} />
-        </TouchableOpacity>
-      )}
-      {isMe ? (
-        <LinearGradient
-          colors={theme.gradientAccent}
-          style={[styles.bubble, styles.bubbleMe]}
-        >
-          <Text style={styles.bubbleTextMe}>{item.text}</Text>
-          <View style={styles.timeRowMe}>
-            <Text style={styles.bubbleTimeMe}>{item.time}</Text>
-            <Ionicons
-              name={item.isRead ? 'checkmark-done' : 'checkmark'}
-              size={13}
-              color={item.isRead ? '#00E5FF' : 'rgba(255,255,255,0.7)'}
-              style={{ marginLeft: 4 }}
-            />
-          </View>
-        </LinearGradient>
-      ) : (
-        <View style={[styles.bubble, styles.bubbleOther]}>
-          <Text style={styles.bubbleTextOther}>{item.text}</Text>
-          <Text style={styles.bubbleTimeOther}>{item.time}</Text>
+    <View style={[styles.msgContainer, isMe && styles.msgContainerMe]}>
+      {/* WhatsApp style floating Reaction Quick Bar */}
+      {isMenuOpen && (
+        <View style={[styles.reactionBarPill, isMe ? styles.reactionBarMe : styles.reactionBarOther]}>
+          {REACTION_EMOJIS.map((emoji) => (
+            <TouchableOpacity
+              key={emoji}
+              style={[
+                styles.reactionEmojiBtn,
+                item.reaction === emoji && styles.reactionEmojiBtnSelected,
+              ]}
+              onPress={() => {
+                onReact(item.id, emoji);
+                onCloseReactionMenu();
+              }}
+              activeOpacity={0.6}
+            >
+              <Text style={styles.reactionEmojiText}>{emoji}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
       )}
-    </Animated.View>
+
+      {/* Heart Pop Overlay for Double-Tap */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.doubleTapHeartWrap,
+          {
+            opacity: heartPop,
+            transform: [{ scale: heartPop }],
+          },
+        ]}
+      >
+        <Text style={{ fontSize: 38 }}>❤️</Text>
+      </Animated.View>
+
+      <Animated.View
+        style={[
+          styles.msgRow,
+          isMe && styles.msgRowMe,
+          { opacity: fade, transform: [{ translateY: rise }] },
+        ]}
+      >
+        {!isMe && (
+          <TouchableOpacity onPress={onAvatarPress} activeOpacity={0.8}>
+            <Image source={{ uri: avatarUri }} style={styles.msgAvatar} />
+          </TouchableOpacity>
+        )}
+
+        <View style={styles.bubbleWrapper}>
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={handleBubblePress}
+            onLongPress={handleLongPress}
+            delayLongPress={300}
+          >
+            {isMe ? (
+              <LinearGradient
+                colors={theme.gradientAccent}
+                style={[styles.bubble, styles.bubbleMe]}
+              >
+                <Text style={styles.bubbleTextMe}>{item.text}</Text>
+                <View style={styles.timeRowMe}>
+                  <Text style={styles.bubbleTimeMe}>{item.time}</Text>
+                  <Ionicons
+                    name={item.isRead ? 'checkmark-done' : 'checkmark'}
+                    size={13}
+                    color={item.isRead ? '#00E5FF' : 'rgba(255,255,255,0.7)'}
+                    style={{ marginLeft: 4 }}
+                  />
+                </View>
+              </LinearGradient>
+            ) : (
+              <View style={[styles.bubble, styles.bubbleOther]}>
+                <Text style={styles.bubbleTextOther}>{item.text}</Text>
+                <Text style={styles.bubbleTimeOther}>{item.time}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          {/* Reaction Badge on Message Corner */}
+          {!!item.reaction && (
+            <TouchableOpacity
+              style={[styles.reactionBadge, isMe ? styles.reactionBadgeMe : styles.reactionBadgeOther]}
+              onPress={() => onReact(item.id, item.reaction)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.reactionBadgeText}>{item.reaction}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </Animated.View>
+    </View>
   );
 });
 
@@ -188,6 +297,12 @@ export default function ChatDetailScreen() {
   const [isSending, setIsSending] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
   const [showJumpToBottom, setShowJumpToBottom] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [activeEmojiCategory, setActiveEmojiCategory] = useState(0);
+
+  const handleAddEmoji = (emoji) => {
+    setInput((prev) => prev + emoji);
+  };
 
   // Custom toast notification state
   const [toastText, setToastText] = useState('');
@@ -366,9 +481,9 @@ export default function ChatDetailScreen() {
             sender: m.sender_id == targetId ? 'other' : 'me',
             time: m.created_at
               ? new Date(m.created_at).toLocaleTimeString([], {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })
+                hour: '2-digit',
+                minute: '2-digit',
+              })
               : 'Now',
             isRead: Boolean(m.is_read),
           }));
@@ -500,7 +615,7 @@ export default function ChatDetailScreen() {
     // Force scroll to bottom immediately after adding message
     isNearBottomRef.current = true;
     setShowJumpToBottom(false);
-    
+
     // Use requestAnimationFrame to ensure scroll happens after render
     requestAnimationFrame(() => {
       scrollToBottom(true);
@@ -511,7 +626,7 @@ export default function ChatDetailScreen() {
         await apiSendMessage(targetId, textToSend);
         // Fetch new messages but preserve scroll position
         await fetchHistory(false);
-        
+
         // After fetching, scroll to bottom again
         requestAnimationFrame(() => {
           if (isNearBottomRef.current) {
@@ -600,6 +715,18 @@ export default function ChatDetailScreen() {
 
   const openProfile = useCallback(() => setShowProfileModal(true), []);
 
+  const [activeReactionMsgId, setActiveReactionMsgId] = useState(null);
+
+  const handleToggleReaction = useCallback((msgId, emoji) => {
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === msgId
+          ? { ...m, reaction: m.reaction === emoji ? null : emoji }
+          : m
+      )
+    );
+  }, []);
+
   const renderMsg = useCallback(
     ({ item }) => (
       <MessageBubble
@@ -608,9 +735,13 @@ export default function ChatDetailScreen() {
         styles={styles}
         avatarUri={activeUser.image}
         onAvatarPress={openProfile}
+        onReact={handleToggleReaction}
+        activeReactionMsgId={activeReactionMsgId}
+        onOpenReactionMenu={(id) => setActiveReactionMsgId(id)}
+        onCloseReactionMenu={() => setActiveReactionMsgId(null)}
       />
     ),
-    [theme, styles, activeUser.image, openProfile]
+    [theme, styles, activeUser.image, openProfile, handleToggleReaction, activeReactionMsgId]
   );
 
   const keyExtractor = useCallback((item) => item.id, []);
@@ -648,106 +779,106 @@ export default function ChatDetailScreen() {
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-      {/* Header */}
-      <View style={styles.headerContainer}>
-        <SafeAreaView edges={['top']} style={styles.headerSafeArea}>
-          <View style={styles.header}>
-            <TouchableOpacity
-              onPress={() => navigation.goBack()}
-              style={styles.backBtn}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="chevron-back" size={22} color={theme.textPrimary} />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.headerProfileTouch}
-              onPress={openProfile}
-              activeOpacity={0.75}
-            >
-              <Image source={{ uri: activeUser.image }} style={styles.headerAvatar} />
-
-              <View style={styles.headerInfo}>
-                <Text style={styles.headerName}>{activeUser.name}</Text>
-                <View style={styles.onlineRow}>
-                  {isOtherTyping ? (
-                    <>
-                      <View style={[styles.onlineDot, { backgroundColor: '#30D158' }]} />
-                      <Text style={[styles.onlineText, { color: '#30D158', fontWeight: '700' }]}>
-                        typing...
-                      </Text>
-                    </>
-                  ) : (
-                    <>
-                      {activeUser.online && <View style={styles.onlineDot} />}
-                      <Text style={styles.onlineText}>
-                        {activeUser.online ? 'Online now' : 'Offline'}
-                      </Text>
-                    </>
-                  )}
-                </View>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.menuBtn}
-              onPress={() => setShowMenu((p) => !p)}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="ellipsis-horizontal" size={18} color={theme.textPrimary} />
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
-      </View>
-
-      {/* Floating 3-Dots Dropdown Menu */}
-      {showMenu && (
-        <TouchableOpacity
-          style={styles.dropdownOverlay}
-          activeOpacity={1}
-          onPress={() => setShowMenu(false)}
-        >
-          <View style={styles.dropdownCard}>
-            <TouchableOpacity
-              style={styles.dropdownOption}
-              onPress={() => {
-                setShowMenu(false);
-                setShowReportModal(true);
-              }}
-            >
-              <Ionicons name="flag-outline" size={18} color="#FF9500" />
-              <Text style={styles.dropdownOptionText}>Report User</Text>
-            </TouchableOpacity>
-
-            <View style={styles.dropdownDivider} />
-
-            {isBlocked ? (
+        {/* Header */}
+        <View style={styles.headerContainer}>
+          <SafeAreaView edges={['top']} style={styles.headerSafeArea}>
+            <View style={styles.header}>
               <TouchableOpacity
-                style={styles.dropdownOption}
-                onPress={handleConfirmUnblock}
+                onPress={() => navigation.goBack()}
+                style={styles.backBtn}
+                activeOpacity={0.7}
               >
-                <Ionicons name="lock-open-outline" size={18} color="#30D158" />
-                <Text style={[styles.dropdownOptionText, { color: '#30D158' }]}>
-                  Unblock User
-                </Text>
+                <Ionicons name="chevron-back" size={22} color={theme.textPrimary} />
               </TouchableOpacity>
-            ) : (
+
+              <TouchableOpacity
+                style={styles.headerProfileTouch}
+                onPress={openProfile}
+                activeOpacity={0.75}
+              >
+                <Image source={{ uri: activeUser.image }} style={styles.headerAvatar} />
+
+                <View style={styles.headerInfo}>
+                  <Text style={styles.headerName}>{activeUser.name}</Text>
+                  <View style={styles.onlineRow}>
+                    {isOtherTyping ? (
+                      <>
+                        <View style={[styles.onlineDot, { backgroundColor: '#30D158' }]} />
+                        <Text style={[styles.onlineText, { color: '#30D158', fontWeight: '700' }]}>
+                          typing...
+                        </Text>
+                      </>
+                    ) : (
+                      <>
+                        {activeUser.online && <View style={styles.onlineDot} />}
+                        <Text style={styles.onlineText}>
+                          {activeUser.online ? 'Online now' : 'Offline'}
+                        </Text>
+                      </>
+                    )}
+                  </View>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.menuBtn}
+                onPress={() => setShowMenu((p) => !p)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="ellipsis-horizontal" size={18} color={theme.textPrimary} />
+              </TouchableOpacity>
+            </View>
+          </SafeAreaView>
+        </View>
+
+        {/* Floating 3-Dots Dropdown Menu */}
+        {showMenu && (
+          <TouchableOpacity
+            style={styles.dropdownOverlay}
+            activeOpacity={1}
+            onPress={() => setShowMenu(false)}
+          >
+            <View style={styles.dropdownCard}>
               <TouchableOpacity
                 style={styles.dropdownOption}
                 onPress={() => {
                   setShowMenu(false);
-                  setShowBlockModal(true);
+                  setShowReportModal(true);
                 }}
               >
-                <Ionicons name="ban-outline" size={18} color="#FF375F" />
-                <Text style={[styles.dropdownOptionText, { color: '#FF375F' }]}>
-                  Block User
-                </Text>
+                <Ionicons name="flag-outline" size={18} color="#FF9500" />
+                <Text style={styles.dropdownOptionText}>Report User</Text>
               </TouchableOpacity>
-            )}
-          </View>
-        </TouchableOpacity>
-      )}
+
+              <View style={styles.dropdownDivider} />
+
+              {isBlocked ? (
+                <TouchableOpacity
+                  style={styles.dropdownOption}
+                  onPress={handleConfirmUnblock}
+                >
+                  <Ionicons name="lock-open-outline" size={18} color="#30D158" />
+                  <Text style={[styles.dropdownOptionText, { color: '#30D158' }]}>
+                    Unblock User
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.dropdownOption}
+                  onPress={() => {
+                    setShowMenu(false);
+                    setShowBlockModal(true);
+                  }}
+                >
+                  <Ionicons name="ban-outline" size={18} color="#FF375F" />
+                  <Text style={[styles.dropdownOptionText, { color: '#FF375F' }]}>
+                    Block User
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </TouchableOpacity>
+        )}
 
         {/* Messages log */}
         <View style={styles.messagesArea}>
@@ -843,40 +974,102 @@ export default function ChatDetailScreen() {
                 </TouchableOpacity>
               </View>
             ) : (
-              <View style={styles.inputRow}>
-                <View style={styles.inputWrap}>
-                  <TextInput
-                    ref={inputRef}
-                    style={styles.input}
-                    placeholder="Type message…"
-                    placeholderTextColor={theme.textFaint}
-                    value={input}
-                    onChangeText={setInput}
-                    multiline
-                  />
+              <>
+                <View style={styles.inputRow}>
+                  <TouchableOpacity
+                    style={styles.emojiToggleBtn}
+                    onPress={() => {
+                      setShowEmojiPicker((p) => !p);
+                      Keyboard.dismiss();
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name={showEmojiPicker ? "keypad-outline" : "happy-outline"}
+                      size={22}
+                      color={showEmojiPicker ? '#FF007F' : theme.textFaint}
+                    />
+                  </TouchableOpacity>
+
+                  <View style={styles.inputWrap}>
+                    <TextInput
+                      ref={inputRef}
+                      style={styles.input}
+                      placeholder="Type message…"
+                      placeholderTextColor={theme.textFaint}
+                      value={input}
+                      onChangeText={setInput}
+                      onFocus={() => setShowEmojiPicker(false)}
+                      multiline
+                    />
+                  </View>
+
+                  <TouchableOpacity
+                    onPress={send}
+                    onPressIn={onSendPressIn}
+                    onPressOut={onSendPressOut}
+                    activeOpacity={0.9}
+                    style={styles.sendBtn}
+                    disabled={isSending || !input.trim()}
+                  >
+                    <Animated.View style={{ flex: 1, transform: [{ scale: sendScale }] }}>
+                      <LinearGradient
+                        colors={theme.gradientAccent}
+                        style={[
+                          styles.sendGrad,
+                          (!input.trim() || isSending) && styles.sendGradDisabled,
+                        ]}
+                      >
+                        <Ionicons name="send" size={15} color="#fff" />
+                      </LinearGradient>
+                    </Animated.View>
+                  </TouchableOpacity>
                 </View>
 
-                <TouchableOpacity
-                  onPress={send}
-                  onPressIn={onSendPressIn}
-                  onPressOut={onSendPressOut}
-                  activeOpacity={0.9}
-                  style={styles.sendBtn}
-                  disabled={isSending || !input.trim()}
-                >
-                  <Animated.View style={{ flex: 1, transform: [{ scale: sendScale }] }}>
-                    <LinearGradient
-                      colors={theme.gradientAccent}
-                      style={[
-                        styles.sendGrad,
-                        (!input.trim() || isSending) && styles.sendGradDisabled,
-                      ]}
+                {showEmojiPicker && (
+                  <View style={styles.emojiPickerContainer}>
+                    <View style={styles.emojiCategoryRow}>
+                      {EMOJI_CATEGORIES.map((cat, idx) => (
+                        <TouchableOpacity
+                          key={cat.name}
+                          style={[
+                            styles.emojiCategoryTab,
+                            activeEmojiCategory === idx && styles.emojiCategoryTabActive,
+                          ]}
+                          onPress={() => setActiveEmojiCategory(idx)}
+                        >
+                          <Text style={styles.emojiCategoryIcon}>{cat.icon}</Text>
+                          <Text
+                            style={[
+                              styles.emojiCategoryName,
+                              activeEmojiCategory === idx && styles.emojiCategoryNameActive,
+                            ]}
+                          >
+                            {cat.name}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    <ScrollView
+                      contentContainerStyle={styles.emojiGrid}
+                      keyboardShouldPersistTaps="always"
+                      showsVerticalScrollIndicator={false}
                     >
-                      <Ionicons name="send" size={15} color="#fff" />
-                    </LinearGradient>
-                  </Animated.View>
-                </TouchableOpacity>
-              </View>
+                      {EMOJI_CATEGORIES[activeEmojiCategory].emojis.map((emoji, idx) => (
+                        <TouchableOpacity
+                          key={idx}
+                          style={styles.emojiItem}
+                          onPress={() => handleAddEmoji(emoji)}
+                          activeOpacity={0.6}
+                        >
+                          <Text style={styles.emojiText}>{emoji}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+              </>
             )}
           </SafeAreaView>
         </View>
@@ -1178,12 +1371,88 @@ const getStyles = (theme) =>
     // Messages log
     messagesArea: { flex: 1, position: 'relative' },
     msgList: { paddingHorizontal: 16, paddingTop: 18, paddingBottom: 16, gap: 10 },
+    msgContainer: {
+      position: 'relative',
+      marginVertical: 4,
+    },
+    msgContainerMe: {
+      alignItems: 'flex-end',
+    },
+    reactionBarPill: {
+      position: 'absolute',
+      top: -46,
+      zIndex: 99,
+      flexDirection: 'row',
+      backgroundColor: theme.isDark ? '#2D224C' : '#FFFFFF',
+      borderRadius: 24,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderWidth: 1,
+      borderColor: theme.isDark ? 'rgba(255, 255, 255, 0.18)' : 'rgba(0, 0, 0, 0.1)',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.25,
+      shadowRadius: 8,
+      elevation: 6,
+    },
+    reactionBarMe: {
+      right: 16,
+    },
+    reactionBarOther: {
+      left: 50,
+    },
+    reactionEmojiBtn: {
+      paddingHorizontal: 6,
+      paddingVertical: 4,
+      borderRadius: 16,
+    },
+    reactionEmojiBtnSelected: {
+      backgroundColor: theme.isDark ? 'rgba(255, 0, 127, 0.25)' : 'rgba(255, 0, 127, 0.15)',
+    },
+    reactionEmojiText: {
+      fontSize: 20,
+    },
+    doubleTapHeartWrap: {
+      position: 'absolute',
+      alignSelf: 'center',
+      top: '10%',
+      zIndex: 90,
+    },
     msgRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
     msgRowMe: { flexDirection: 'row-reverse' },
     msgAvatar: { width: 30, height: 30, borderRadius: 15, marginBottom: 2 },
+    bubbleWrapper: {
+      position: 'relative',
+      maxWidth: '78%',
+    },
+    reactionBadge: {
+      position: 'absolute',
+      bottom: -10,
+      backgroundColor: theme.isDark ? '#2D224C' : '#FFFFFF',
+      borderRadius: 12,
+      paddingHorizontal: 5,
+      paddingVertical: 1,
+      borderWidth: 1,
+      borderColor: theme.isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.1)',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.15,
+      shadowRadius: 4,
+      elevation: 3,
+      zIndex: 10,
+    },
+    reactionBadgeMe: {
+      right: 10,
+    },
+    reactionBadgeOther: {
+      left: 10,
+    },
+    reactionBadgeText: {
+      fontSize: 13,
+    },
 
     bubble: {
-      maxWidth: '74%',
+      maxWidth: '100%',
       borderRadius: 20,
       paddingHorizontal: 14,
       paddingVertical: 10,
@@ -1250,6 +1519,63 @@ const getStyles = (theme) =>
       gap: 10,
       paddingHorizontal: 16,
       paddingVertical: 10,
+    },
+    emojiToggleBtn: {
+      paddingHorizontal: 4,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    emojiPickerContainer: {
+      height: 200,
+      backgroundColor: theme.isDark ? '#1C1535' : '#F9F8FC',
+      borderTopWidth: 1,
+      borderTopColor: theme.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+    },
+    emojiCategoryRow: {
+      flexDirection: 'row',
+      borderBottomWidth: 1,
+      borderBottomColor: theme.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+    },
+    emojiCategoryTab: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 12,
+      paddingVertical: 5,
+      borderRadius: 16,
+      marginRight: 6,
+    },
+    emojiCategoryTabActive: {
+      backgroundColor: theme.isDark ? 'rgba(255,0,127,0.22)' : 'rgba(255,0,127,0.12)',
+    },
+    emojiCategoryIcon: {
+      fontSize: 13,
+      marginRight: 4,
+    },
+    emojiCategoryName: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: theme.textFaint,
+    },
+    emojiCategoryNameActive: {
+      color: '#FF007F',
+      fontWeight: '800',
+    },
+    emojiGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      padding: 8,
+      justifyContent: 'flex-start',
+    },
+    emojiItem: {
+      width: (width - 16) / 8,
+      height: 42,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    emojiText: {
+      fontSize: 23,
     },
     inputWrap: {
       flex: 1,

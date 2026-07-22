@@ -67,20 +67,54 @@ export default function ProfileScreen() {
   // Registered user data
   const profileUser = useMemo(() => {
     const u = user || {};
-    const cityState = u.city ? `${u.city}${u.state ? ', ' + u.state : ''}` : (u.location || 'Chicago, IL');
+    const cityState = u.city ? `${u.city}${u.state ? ', ' + u.state : ''}` : (u.location || 'Mumbai, Maharashtra');
 
     return {
       name: u.name || 'Alex Rivera',
+      displayName: u.display_name || u.name || 'Alex',
       age: u.age || 26,
-      job: u.job || 'Member',
-      city: u.city || 'Chicago',
-      state: u.state || 'IL',
+      job: u.occupation || u.job || 'Professional',
+      city: u.city || 'Mumbai',
+      state: u.state || 'Maharashtra',
       location: cityState,
+      pincode: u.pincode || '',
       bio: u.bio || 'Living life, chasing dreams, and making meaningful connections.',
       relationshipType: u.relationship_type || u.relationshipType || 'Long-term relationship',
+      maritalStatus: u.marital_status || 'Never Married',
+      motherTongue: u.mother_tongue || 'Hindi',
+      languagesSpoken: ensureArray(u.languages_spoken, [u.mother_tongue || 'Hindi', 'English']),
+      religion: u.religion || 'Hinduism',
+      education: u.education || "Bachelor's Degree",
+      diet: u.diet || 'Vegetarian',
+      smoking: u.smoking || 'Never',
+      drinking: u.drinking || 'Socially',
+      clubbing: u.clubbing || 'Never',
+      videoIntroUrl: u.video_intro_url || '',
       interests: ensureArray(u.interests || u.hobbies, ['Design', 'Photography', 'Travel', 'Coffee', 'Music']),
     };
   }, [user]);
+
+  const handlePickVideoIntro = async () => {
+    try {
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['videos'],
+        allowsEditing: true,
+        quality: 0.8,
+      });
+      if (!res.canceled && res.assets[0]?.uri) {
+        const videoUri = res.assets[0].uri;
+        updateUser({ video_intro_url: videoUri });
+        try {
+          await updateUserProfile(user?.id, { video_intro_url: videoUri });
+        } catch (e) {
+          console.log('Local video intro update saved:', e);
+        }
+        setSuccessAlertVisible(true);
+      }
+    } catch (e) {
+      console.warn('Video picker error:', e);
+    }
+  };
 
 
 
@@ -346,6 +380,97 @@ export default function ProfileScreen() {
             <Text style={styles.bioText}>{profileUser.bio}</Text>
           </View>
 
+          {/* Video Introduction Box */}
+          <View style={styles.sectionBox}>
+            <BlurView intensity={isDark ? 40 : 70} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
+            <View style={styles.sectionHeaderRow}>
+              <Ionicons name="videocam-outline" size={16} color="#FF007F" style={{ marginRight: 6 }} />
+              <Text style={styles.sectionLabel}>Video Introduction (3x Reach Boost)</Text>
+            </View>
+
+            {profileUser.videoIntroUrl ? (
+              <View style={styles.videoActiveRow}>
+                <Ionicons name="checkmark-circle" size={18} color="#30D158" style={{ marginRight: 6 }} />
+                <Text style={styles.videoActiveText}>Video Intro Attached</Text>
+                <TouchableOpacity style={styles.videoChangeBtn} onPress={handlePickVideoIntro}>
+                  <Text style={styles.videoChangeBtnText}>Change</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity style={styles.uploadVideoIntroBtn} onPress={handlePickVideoIntro} activeOpacity={0.8}>
+                <Ionicons name="videocam" size={16} color="#FF007F" style={{ marginRight: 6 }} />
+                <Text style={styles.uploadVideoIntroText}>Record / Upload 15s Video Intro</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Personal Identity & Lifestyle Section */}
+          <View style={styles.sectionBox}>
+            <BlurView intensity={isDark ? 40 : 70} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
+            <View style={styles.sectionHeaderRow}>
+              <Ionicons name="ribbon-outline" size={16} color="#FF007F" style={{ marginRight: 6 }} />
+              <Text style={styles.sectionLabel}>Personal & Lifestyle</Text>
+            </View>
+
+            <View style={styles.attributesGrid}>
+              <View style={styles.attributePill}>
+                <Ionicons name="language-outline" size={14} color="#FF007F" style={{ marginRight: 6 }} />
+                <Text style={styles.attributeText}>Mother Tongue: {profileUser.motherTongue}</Text>
+              </View>
+
+              <View style={styles.attributePill}>
+                <Ionicons name="chatbubbles-outline" size={14} color="#FF007F" style={{ marginRight: 6 }} />
+                <Text style={styles.attributeText}>Languages: {profileUser.languagesSpoken.join(', ')}</Text>
+              </View>
+
+              <View style={styles.attributePill}>
+                <Ionicons name="sparkles-outline" size={14} color="#FF007F" style={{ marginRight: 6 }} />
+                <Text style={styles.attributeText}>Religion: {profileUser.religion}</Text>
+              </View>
+
+              <View style={styles.attributePill}>
+                <Ionicons name="school-outline" size={14} color="#FF007F" style={{ marginRight: 6 }} />
+                <Text style={styles.attributeText}>Education: {profileUser.education}</Text>
+              </View>
+
+              <View style={styles.attributePill}>
+                <Ionicons name="shield-checkmark-outline" size={14} color="#FF007F" style={{ marginRight: 6 }} />
+                <Text style={styles.attributeText}>Status: {profileUser.maritalStatus}</Text>
+              </View>
+
+              <View style={styles.attributePill}>
+                <Ionicons name="restaurant-outline" size={14} color="#FF007F" style={{ marginRight: 6 }} />
+                <Text style={styles.attributeText}>Diet: {profileUser.diet}</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Lifestyle & Dating Habits Box */}
+          <View style={styles.sectionBox}>
+            <BlurView intensity={isDark ? 40 : 70} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
+            <View style={styles.sectionHeaderRow}>
+              <Ionicons name="wine-outline" size={16} color="#FF007F" style={{ marginRight: 6 }} />
+              <Text style={styles.sectionLabel}>How I Am To Date (Lifestyle & Habits)</Text>
+            </View>
+
+            <View style={styles.attributesGrid}>
+              <View style={styles.attributePill}>
+                <Ionicons name="flame-outline" size={14} color="#FF007F" style={{ marginRight: 6 }} />
+                <Text style={styles.attributeText}>Smoking: {profileUser.smoking}</Text>
+              </View>
+
+              <View style={styles.attributePill}>
+                <Ionicons name="wine-outline" size={14} color="#FF007F" style={{ marginRight: 6 }} />
+                <Text style={styles.attributeText}>Drinking: {profileUser.drinking}</Text>
+              </View>
+
+              <View style={styles.attributePill}>
+                <Ionicons name="disc-outline" size={14} color="#FF007F" style={{ marginRight: 6 }} />
+                <Text style={styles.attributeText}>Nightlife / Clubbing: {profileUser.clubbing}</Text>
+              </View>
+            </View>
+          </View>
+
           {/* Relationship Goals Section */}
           <View style={styles.sectionBox}>
             <BlurView intensity={isDark ? 40 : 70} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
@@ -368,6 +493,7 @@ export default function ProfileScreen() {
             <View style={styles.interestsRow}>
               {profileUser.interests.map((tag, idx) => (
                 <View key={idx} style={styles.interestTag}>
+                  <Ionicons name="checkmark-circle-outline" size={13} color="#FF007F" style={{ marginRight: 4 }} />
                   <Text style={styles.interestTagText}>{tag}</Text>
                 </View>
               ))}
@@ -807,6 +933,15 @@ const getStyles = (theme) => StyleSheet.create({
     color: theme.textSec,
     lineHeight: 21,
   },
+  videoActiveRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(48,209,88,0.1)', paddingHorizontal: 12, paddingVertical: 10, borderRadius: 14, borderWidth: 1, borderColor: '#30D158' },
+  videoActiveText: { flex: 1, fontSize: 13, fontWeight: '700', color: '#30D158' },
+  videoChangeBtn: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, backgroundColor: '#30D158' },
+  videoChangeBtnText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  uploadVideoIntroBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,0,127,0.08)', paddingVertical: 12, borderRadius: 14, borderWidth: 1.5, borderColor: 'rgba(255,0,127,0.3)', borderStyle: 'dashed' },
+  uploadVideoIntroText: { color: '#FF007F', fontSize: 13, fontWeight: '800' },
+  attributesGrid: { gap: 8, marginTop: 4 },
+  attributePill: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, borderWidth: 1, borderColor: theme.border },
+  attributeText: { fontSize: 13, fontWeight: '600', color: theme.textPrimary },
 
   // Relationship goal chip
   goalChip: {
