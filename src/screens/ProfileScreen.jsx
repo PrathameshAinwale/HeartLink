@@ -212,6 +212,26 @@ export default function ProfileScreen() {
     }
   };
 
+  const handleSelectProfilePic = async (selectedPhotoUrl, selectedIndex) => {
+    setPhotoIdx(0);
+    const otherPhotos = allPhotos.filter((_, i) => i !== selectedIndex);
+    const updatedPhotos = [selectedPhotoUrl, ...otherPhotos];
+
+    const updatedPayload = {
+      avatar: selectedPhotoUrl,
+      photos: updatedPhotos,
+      images: updatedPhotos,
+    };
+
+    updateUser(updatedPayload);
+
+    try {
+      await updateUserProfile(user?.id, updatedPayload);
+    } catch (e) {
+      console.log('Profile photo update cached locally:', e);
+    }
+  };
+
   const handleOpenEdit = () => {
     setEditName(profileUser.name);
     setEditJob(profileUser.job);
@@ -313,11 +333,8 @@ export default function ProfileScreen() {
             </TouchableOpacity>
 
             <View style={styles.headerRightActions}>
-              <TouchableOpacity style={styles.glassBtn} onPress={toggleTheme} activeOpacity={0.7}>
-                <Ionicons name={isDark ? "sunny-outline" : "moon-outline"} size={18} color="#fff" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.glassBtn} onPress={handleLogout} activeOpacity={0.7}>
-                <Ionicons name="log-out-outline" size={18} color="#fff" />
+              <TouchableOpacity style={styles.glassBtn} onPress={() => navigation.navigate('Settings')} activeOpacity={0.7}>
+                <Ionicons name="settings-outline" size={20} color="#fff" />
               </TouchableOpacity>
             </View>
           </View>
@@ -507,31 +524,47 @@ export default function ProfileScreen() {
                 <Ionicons name="images-outline" size={16} color="#FF007F" style={{ marginRight: 6 }} />
                 <Text style={styles.galleryTitle}>Photo Gallery ({allPhotos.length})</Text>
               </View>
+              <TouchableOpacity
+                style={styles.addPhotoHeaderBtn}
+                onPress={() => setPhotoPickerVisible(true)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="add-circle" size={18} color="#FF007F" style={{ marginRight: 4 }} />
+                <Text style={styles.addPhotoHeaderTxt}>Add Photo</Text>
+              </TouchableOpacity>
             </View>
 
-            <FlatList
-              data={allPhotos}
-              keyExtractor={(_, i) => i.toString()}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              nestedScrollEnabled={true}
-              contentContainerStyle={styles.galleryList}
-              renderItem={({ item, index }) => (
-                <TouchableOpacity
-                  style={[styles.galleryThumb, index === photoIdx && styles.galleryThumbActive]}
-                  onPress={() => setPhotoIdx(index)}
-                  activeOpacity={0.9}
-                >
-                  <Image source={{ uri: item }} style={styles.galleryThumbImg} />
-                  {index === photoIdx && (
-                    <LinearGradient
-                      colors={['rgba(255, 0, 127, 0.35)', 'transparent']}
-                      style={StyleSheet.absoluteFill}
-                    />
-                  )}
-                </TouchableOpacity>
-              )}
-            />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled={true} contentContainerStyle={styles.galleryList}>
+              {/* Add Photo Card Tile */}
+              <TouchableOpacity
+                style={styles.addPhotoCardTile}
+                onPress={() => setPhotoPickerVisible(true)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="add" size={28} color="#FF007F" />
+                <Text style={styles.addPhotoTileTxt}>Add Photo</Text>
+              </TouchableOpacity>
+
+              {allPhotos.map((item, index) => {
+                const isCurrentAvatar = item === profileUser.avatar || index === 0;
+                return (
+                  <TouchableOpacity
+                    key={index}
+                    style={[styles.galleryThumb, isCurrentAvatar && styles.galleryThumbActive]}
+                    onPress={() => handleSelectProfilePic(item, index)}
+                    activeOpacity={0.85}
+                  >
+                    <Image source={{ uri: item }} style={styles.galleryThumbImg} />
+                    {isCurrentAvatar && (
+                      <View style={styles.avatarBadgeOverlay}>
+                        <Ionicons name="star" size={10} color="#FFF" style={{ marginRight: 3 }} />
+                        <Text style={styles.avatarBadgeTxt}>Main Pic</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
         </View>
       </ScrollView>
@@ -997,8 +1030,38 @@ const getStyles = (theme) => StyleSheet.create({
     fontWeight: '800',
     color: theme.textPrimary,
   },
+  addPhotoHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 0, 127, 0.1)',
+  },
+  addPhotoHeaderTxt: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FF007F',
+  },
   galleryList: {
     gap: 12,
+  },
+  addPhotoCardTile: {
+    width: 110,
+    height: 140,
+    borderRadius: 18,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: '#FF007F',
+    backgroundColor: theme.isDark ? 'rgba(255, 0, 127, 0.08)' : 'rgba(255, 0, 127, 0.04)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addPhotoTileTxt: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: '#FF007F',
+    marginTop: 4,
   },
   galleryThumb: {
     width: 110,
@@ -1016,6 +1079,24 @@ const getStyles = (theme) => StyleSheet.create({
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
+  },
+  avatarBadgeOverlay: {
+    position: 'absolute',
+    bottom: 6,
+    left: 6,
+    right: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 0, 127, 0.85)',
+    borderRadius: 10,
+    paddingVertical: 3,
+    paddingHorizontal: 6,
+  },
+  avatarBadgeTxt: {
+    color: '#FFF',
+    fontSize: 9.5,
+    fontWeight: '800',
   },
 
   // ─── Edit Modal Styling ─────────────────────────────────────────────

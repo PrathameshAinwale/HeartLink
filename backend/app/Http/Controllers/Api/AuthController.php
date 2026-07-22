@@ -285,4 +285,35 @@ class AuthController extends Controller
             'message' => 'Logged out successfully',
         ]);
     }
+
+    public function deactivateAccount(Request $request)
+    {
+        $user = $request->user();
+        $user->is_online = false;
+        $user->save();
+        $user->currentAccessToken()->delete();
+
+        return response()->json([
+            'message' => 'Account deactivated successfully',
+        ]);
+    }
+
+    public function deleteAccount(Request $request)
+    {
+        $user = $request->user();
+        $userId = $user->id;
+
+        \App\Models\Message::where('sender_id', $userId)->orWhere('receiver_id', $userId)->delete();
+        \App\Models\UserMatch::where('user_1_id', $userId)->orWhere('user_2_id', $userId)->delete();
+        \App\Models\Swipe::where('swiper_id', $userId)->orWhere('swiped_user_id', $userId)->delete();
+        \App\Models\UserBlock::where('blocker_id', $userId)->orWhere('blocked_user_id', $userId)->delete();
+        \App\Models\ProfilePhoto::where('user_id', $userId)->delete();
+
+        $user->tokens()->delete();
+        $user->delete();
+
+        return response()->json([
+            'message' => 'Account deleted permanently',
+        ]);
+    }
 }

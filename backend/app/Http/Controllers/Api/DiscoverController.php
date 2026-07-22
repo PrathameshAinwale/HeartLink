@@ -91,8 +91,21 @@ class DiscoverController extends Controller
         ]);
 
         $swiperId = $request->user()->id;
-        $targetId = $request->input('swiped_user_id');
+        $targetId = (int) $request->input('swiped_user_id');
         $type     = $request->input('type');
+
+        // Check if either user is blocked
+        $isBlocked = \App\Models\UserBlock::where(function ($q) use ($swiperId, $targetId) {
+            $q->where('blocker_id', $swiperId)->where('blocked_user_id', $targetId);
+        })->orWhere(function ($q) use ($swiperId, $targetId) {
+            $q->where('blocker_id', $targetId)->where('blocked_user_id', $swiperId);
+        })->exists();
+
+        if ($isBlocked) {
+            return response()->json([
+                'message' => 'Cannot interact with blocked user.',
+            ], 403);
+        }
 
         // Record or update swipe
         $swipe = Swipe::updateOrCreate(

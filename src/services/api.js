@@ -277,6 +277,7 @@ export const apiSendMessage = (receiverId, message) => apiFetch('/chats/send', {
   method: 'POST',
   body: { receiver_id: receiverId, message },
 });
+export const apiGetBlockedUsers = () => apiFetch('/users/blocked');
 export const apiBlockUser = (blockedUserId) => apiFetch('/users/block', {
   method: 'POST',
   body: { blocked_user_id: blockedUserId },
@@ -285,10 +286,18 @@ export const apiUnblockUser = (blockedUserId) => apiFetch('/users/unblock', {
   method: 'POST',
   body: { blocked_user_id: blockedUserId },
 });
+export const apiUnmatchUser = (matchedUserId) => apiFetch('/matches/unmatch', {
+  method: 'POST',
+  body: { matched_user_id: matchedUserId },
+});
 export const apiReportUser = (reportedUserId, reason) => apiFetch('/users/report', {
   method: 'POST',
   body: { reported_user_id: reportedUserId, reason },
 });
+
+// ─── Account Management API ──────────────────────────────────────────
+export const apiDeactivateAccount = () => apiFetch('/user/deactivate', { method: 'POST' });
+export const apiDeleteAccount     = () => apiFetch('/user/account', { method: 'DELETE' });
 
 // ─── Date Planner API ────────────────────────────────────────────────
 export const apiGetRestaurants = () => apiFetch('/restaurants');

@@ -10,8 +10,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../hooks/useAuth';
+import CustomAlertModal from '../components/CustomAlertModal';
+import ProfileDetail from '../components/discovery/ProfileDetail';
 import { apiSwipeUser, apiGetDiscoveryFeed, apiGetRequests, apiResetDiscovery } from '../services/api';
-import { ensureArray, formatImageUrl } from '../utils/helpers';
+import { ensureArray, formatImageUrl, calculateMatchPercentage } from '../utils/helpers';
 
 const { width, height } = Dimensions.get('window');
 
@@ -46,6 +48,58 @@ export default function DiscoverScreen() {
   const [likeMsgIdx, setLikeMsgIdx] = useState(0);
   const [passMsgIdx, setPassMsgIdx] = useState(0);
   const [sheetPhotoIdx, setSheetPhotoIdx] = useState(0);
+  const [rewindModalVisible, setRewindModalVisible] = useState(false);
+
+  const { user } = useAuth();
+  const [dbProfiles, setDbProfiles] = useState([]);
+  const [requestCount, setRequestCount] = useState(0);
+
+  // FIXED: Improved subscription check with better detection
+  const hasSubscribedPlan = useMemo(() => {
+    if (!user) return false;
+
+    // Log user data for debugging (remove in production)
+    console.log('User subscription data:', {
+      activeSubscription: user?.activeSubscription,
+      active_subscription: user?.active_subscription,
+      subscription_plan: user?.subscription_plan,
+      plan_name: user?.plan_name,
+      plan: user?.plan,
+      premium: user?.premium,
+      isPremium: user?.isPremium,
+      subscription: user?.subscription,
+      subscriptionStatus: user?.subscriptionStatus
+    });
+
+    // Check multiple possible subscription fields
+    const hasActiveSubscription = !!(
+      user.activeSubscription ||
+      user.active_subscription ||
+      user.subscription_plan ||
+      user.plan_name ||
+      user.premium === true ||
+      user.isPremium === true ||
+      user.subscription === 'active' ||
+      user.subscriptionStatus === 'active' ||
+      (user.plan && user.plan.toLowerCase() !== 'free' && user.plan.toLowerCase() !== 'none' && user.plan.toLowerCase() !== '')
+    );
+
+    return hasActiveSubscription;
+  }, [user]);
+
+  const handleRewindPress = () => {
+    if (!hasSubscribedPlan) {
+      setRewindModalVisible(true);
+    } else {
+      if (currentIndex > 0) {
+        setCurrentIndex(prev => prev - 1);
+        resetCardPositions();
+      } else {
+        // Optional: Show a toast/snackbar that there are no profiles to rewind
+        console.log('No profiles to rewind');
+      }
+    }
+  };
 
   const cardHeightRef = useRef(height * 0.5);
 
@@ -108,10 +162,6 @@ export default function DiscoverScreen() {
     extrapolate: 'clamp'
   });
 
-  const { user } = useAuth();
-  const [dbProfiles, setDbProfiles] = useState([]);
-  const [requestCount, setRequestCount] = useState(0);
-
   const formatApiProfile = (u) => {
     let userPhotos = [];
     const photosArr = ensureArray(u.photos);
@@ -128,6 +178,9 @@ export default function DiscoverScreen() {
 
     const cityState = u.city ? `${u.city}${u.state ? ', ' + u.state : ''}` : (u.location || 'Nearby');
 
+    const matchRes = calculateMatchPercentage(user, u);
+    const dynamicScore = u.compatibility_score || matchRes.percentage;
+
     return {
       id: u.id,
       name: u.name || 'Member',
@@ -137,11 +190,19 @@ export default function DiscoverScreen() {
       bio: u.bio || 'Living life and finding meaningful connections on HeartLink.',
       location: cityState,
       distance: 'Nearby',
-      compatibility: u.compatibility_score || 92,
+      compatibility: dynamicScore,
       images: userPhotos,
       interests: ensureArray(u.interests, ['Travel', 'Coffee', 'Music']),
       mutuals: ensureArray(u.mutuals, []),
-      tag: 'Active today',
+      smoking: u.smoking,
+      drinking: u.drinking,
+      clubbing: u.clubbing,
+      diet: u.diet,
+      education: u.education,
+      religion: u.religion,
+      mother_tongue: u.mother_tongue || u.motherTongue,
+      marital_status: u.marital_status || u.maritalStatus,
+      user: u,
     };
   };
 
@@ -246,13 +307,10 @@ export default function DiscoverScreen() {
   const openDetail = () => {
     if (isAnimating) return;
     setShowDetail(true);
-    sheetDragY.setValue(0);
-    Animated.spring(sheetY, { toValue: 0, tension: 35, friction: 8, useNativeDriver: false }).start();
   };
 
   const closeDetail = () => {
-    sheetDragY.setValue(0);
-    Animated.timing(sheetY, { toValue: height, duration: 250, useNativeDriver: false }).start(() => setShowDetail(false));
+    setShowDetail(false);
   };
 
   const resetCardPositions = () => {
@@ -283,7 +341,7 @@ export default function DiscoverScreen() {
 
     const currentP = currentProfile;
     if (currentP && currentP.id) {
-      apiSwipeUser(currentP.id, 'like').catch(() => {});
+      apiSwipeUser(currentP.id, 'like').catch(() => { });
     }
 
     setLikeMsgIdx(Math.floor(Math.random() * LIKE_MESSAGES.length));
@@ -377,7 +435,7 @@ export default function DiscoverScreen() {
 
     const currentP = currentProfile;
     if (currentP && currentP.id) {
-      apiSwipeUser(currentP.id, 'pass').catch(() => {});
+      apiSwipeUser(currentP.id, 'pass').catch(() => { });
     }
 
     setPassMsgIdx(Math.floor(Math.random() * PASS_MESSAGES.length));
@@ -479,14 +537,20 @@ export default function DiscoverScreen() {
 
           <Text style={styles.headerCenterTitle}>Heart Link</Text>
 
-          <TouchableOpacity style={styles.headerRightBtn} onPress={() => navigation.navigate('Requests')} activeOpacity={0.7}>
-            <Ionicons name="notifications" size={19} color={theme.textPrimary} />
-            {requestCount > 0 && (
-              <View style={styles.headerBadge}>
-                <Text style={styles.headerBadgeText}>{requestCount > 99 ? '99+' : requestCount}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
+          <View style={styles.headerRightGroup}>
+            <TouchableOpacity style={styles.headerRightBtn} onPress={handleRewindPress} activeOpacity={0.7}>
+              <Ionicons name="reload-outline" size={18} color="#F59E0B" />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.headerRightBtn} onPress={() => navigation.navigate('Requests')} activeOpacity={0.7}>
+              <Ionicons name="notifications" size={19} color={theme.textPrimary} />
+              {requestCount > 0 && (
+                <View style={styles.headerBadge}>
+                  <Text style={styles.headerBadgeText}>{requestCount > 99 ? '99+' : requestCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
       </SafeAreaView>
 
@@ -518,177 +582,200 @@ export default function DiscoverScreen() {
           {!currentProfile || activeProfiles.length === 0 ? (
             <View style={styles.emptyWrap}>
               <View style={styles.emptyCard}>
-                <Ionicons name="sparkles-outline" size={60} color="#FF007F" />
-                <Text style={styles.emptyTitle}>You're all caught up!</Text>
+                <View style={styles.emptyIconWrap}>
+                  <Ionicons name="sparkles-outline" size={48} color="#FF007F" />
+                </View>
+
+                <Text style={styles.emptyTitle}>You've Swiped All Profiles!</Text>
                 <Text style={styles.emptySub}>
-                  You've seen all available profiles for today. Come back tomorrow for new people in your area! 🌟
+                  You've explored all nearby matches in your area. Reload your feed to view swiped profiles again, or upgrade your subscription plan for unlimited Passport reach!
                 </Text>
+
                 <TouchableOpacity
                   style={styles.emptyBtn}
                   onPress={async () => {
                     setCurrentIndex(0);
                     try {
                       await apiResetDiscovery();
-                    } catch (_) {}
+                    } catch (_) { }
                     fetchFeed();
                   }}
                   activeOpacity={0.85}
                 >
-                  <LinearGradient colors={theme.gradientAccent} style={styles.emptyBtnGrad}>
-                    <Ionicons name="refresh-outline" size={16} color="#FFF" style={{ marginRight: 6 }} />
-                    <Text style={styles.emptyBtnTxt}>Check Again</Text>
+                  <LinearGradient colors={['#FF007F', '#B5179E']} style={styles.emptyBtnGrad}>
+                    <Ionicons name="refresh-outline" size={18} color="#FFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.emptyBtnTxt}>Reload Swiped Feed</Text>
                   </LinearGradient>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.emptySecondaryBtn}
+                  onPress={() => navigation.navigate('Plans')}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="sparkles-outline" size={16} color="#FF007F" style={{ marginRight: 6 }} />
+                  <Text style={styles.emptySecondaryTxt}>Upgrade Plan for Worldwide Reach</Text>
                 </TouchableOpacity>
               </View>
             </View>
           ) : (
-          <>
-          {/* Card 3 (Back-most) - Hidden during transition */}
-          {showBackgroundCards && nextNextProfile && (
-            <Animated.View style={[
-              styles.card,
-              styles.cardBack2,
-              {
-                opacity: card3Opacity,
-                transform: [
-                  { translateY: card3Pos.y },
-                  { scale: card3Scale }
-                ]
-              }
-            ]}>
-              <Image source={{ uri: formatImageUrl(nextNextProfile.images?.[0]) }} style={styles.cardPhoto} resizeMode="cover" />
-              <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.75)']} style={styles.bottomGrad} />
-              <View style={styles.cardTextOverlayBottomLeft}>
-                <Text style={styles.cardProfileName}>{nextNextProfile.name}, {nextNextProfile.age}</Text>
-                <Text style={styles.cardProfileJob}>{nextNextProfile.job}</Text>
-              </View>
-            </Animated.View>
-          )}
+            <>
+              {/* Card 3 (Back-most) - Hidden during transition */}
+              {showBackgroundCards && nextNextProfile && (
+                <Animated.View style={[
+                  styles.card,
+                  styles.cardBack2,
+                  {
+                    opacity: card3Opacity,
+                    transform: [
+                      { translateY: card3Pos.y },
+                      { scale: card3Scale }
+                    ]
+                  }
+                ]}>
+                  <Image source={{ uri: formatImageUrl(nextNextProfile.images?.[0]) }} style={styles.cardPhoto} resizeMode="cover" />
+                  <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.75)']} style={styles.bottomGrad} />
+                  <View style={styles.cardTextOverlayBottomLeft}>
+                    <Text style={styles.cardProfileName}>{nextNextProfile.name}, {nextNextProfile.age}</Text>
+                    <Text style={styles.cardProfileJob}>{nextNextProfile.job}</Text>
+                  </View>
+                </Animated.View>
+              )}
 
-          {/* Card 2 (Middle) - Hidden during transition */}
-          {showBackgroundCards && nextProfile && (
-            <Animated.View style={[
-              styles.card,
-              styles.cardBack1,
-              {
-                opacity: card2Opacity,
-                transform: [
-                  { translateY: card2Pos.y },
-                  { scale: card2Scale }
-                ]
-              }
-            ]}>
-              <Image source={{ uri: formatImageUrl(nextProfile.images?.[0]) }} style={styles.cardPhoto} resizeMode="cover" />
-              <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.75)']} style={styles.bottomGrad} />
-              <View style={styles.cardTextOverlayBottomLeft}>
-                <Text style={styles.cardProfileName}>{nextProfile.name}, {nextProfile.age}</Text>
-                <Text style={styles.cardProfileJob}>{nextProfile.job}</Text>
-              </View>
-            </Animated.View>
-          )}
+              {/* Card 2 (Middle) - Hidden during transition */}
+              {showBackgroundCards && nextProfile && (
+                <Animated.View style={[
+                  styles.card,
+                  styles.cardBack1,
+                  {
+                    opacity: card2Opacity,
+                    transform: [
+                      { translateY: card2Pos.y },
+                      { scale: card2Scale }
+                    ]
+                  }
+                ]}>
+                  <Image source={{ uri: formatImageUrl(nextProfile.images?.[0]) }} style={styles.cardPhoto} resizeMode="cover" />
+                  <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.75)']} style={styles.bottomGrad} />
+                  <View style={styles.cardTextOverlayBottomLeft}>
+                    <Text style={styles.cardProfileName}>{nextProfile.name}, {nextProfile.age}</Text>
+                    <Text style={styles.cardProfileJob}>{nextProfile.job}</Text>
+                  </View>
+                  <View style={styles.cardMatchBadge} pointerEvents="none">
+                    <Ionicons name="sparkles" size={11} color="#FFF" style={{ marginRight: 3 }} />
+                    <Text style={styles.cardMatchBadgeTxt}>{nextProfile.compatibility}% MATCH</Text>
+                  </View>
+                </Animated.View>
+              )}
 
-          {/* Card 1 (Active) - No drag/swipe handlers, only taps + buttons */}
-          <Animated.View
-            style={[
-              styles.card,
-              styles.cardActive,
-              {
-                opacity: card1Opacity,
-                transform: [
-                  { translateX: pan.x },
-                  { translateY: pan.y },
-                  { rotate: rotate }
-                ]
-              }
-            ]}
-          >
-            <Image
-              key={`${currentProfile?.id || currentIndex}-${photoIdx}`}
-              source={{ uri: formatImageUrl(currentProfile.images[photoIdx]) }}
-              style={styles.cardPhoto}
-              resizeMode="cover"
-            />
+              {/* Card 1 (Active) - No drag/swipe handlers, only taps + buttons */}
+              <Animated.View
+                style={[
+                  styles.card,
+                  styles.cardActive,
+                  {
+                    opacity: card1Opacity,
+                    transform: [
+                      { translateX: pan.x },
+                      { translateY: pan.y },
+                      { rotate: rotate }
+                    ]
+                  }
+                ]}
+              >
+                <Image
+                  key={`${currentProfile?.id || currentIndex}-${photoIdx}`}
+                  source={{ uri: formatImageUrl(currentProfile.images[photoIdx]) }}
+                  style={styles.cardPhoto}
+                  resizeMode="cover"
+                />
 
-            <LinearGradient colors={['rgba(0,0,0,0.15)', 'transparent']} style={styles.topGrad} />
-            <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.75)']} style={styles.bottomGrad} />
+                <LinearGradient colors={['rgba(0,0,0,0.15)', 'transparent']} style={styles.topGrad} />
+                <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.75)']} style={styles.bottomGrad} />
 
-            {/* Photo progress dots */}
-            {currentProfile.images.length > 1 && (
-              <View style={styles.photoDotsRow} pointerEvents="none">
-                {currentProfile.images.map((_, i) => (
-                  <View
-                    key={i}
-                    style={[styles.photoDot, i === photoIdx && styles.photoDotActive]}
-                  />
-                ))}
-              </View>
-            )}
+                {/* Top-Right Match Percentage Badge */}
+                <View style={styles.cardMatchBadge} pointerEvents="none">
+                  <Ionicons name="sparkles" size={11} color="#FFF" style={{ marginRight: 3 }} />
+                  <Text style={styles.cardMatchBadgeTxt}>{currentProfile.compatibility}% MATCH</Text>
+                </View>
 
-            {/* Tap zones: left = prev photo, right = next photo. No drag. */}
-            <View style={styles.tapZoneRow} pointerEvents="box-none">
-              <Pressable onPress={handlePhotoTapLeft} style={{ flex: 1 }}>
-                <View style={styles.tapZoneSide} />
-              </Pressable>
-              <Pressable onPress={openDetail} style={{ flex: 2 }}>
-                <View style={styles.tapZoneCenter} />
-              </Pressable>
-              <Pressable onPress={handlePhotoTapRight} style={{ flex: 1 }}>
-                <View style={styles.tapZoneSide} />
-              </Pressable>
-            </View>
+                {/* Photo progress dots */}
+                {currentProfile.images.length > 1 && (
+                  <View style={styles.photoDotsRow} pointerEvents="none">
+                    {currentProfile.images.map((_, i) => (
+                      <View
+                        key={i}
+                        style={[styles.photoDot, i === photoIdx && styles.photoDotActive]}
+                      />
+                    ))}
+                  </View>
+                )}
 
-            <Animated.View style={{ opacity: detailsOpacity, width: '100%', position: 'absolute', bottom: 0 }} pointerEvents="box-none">
-              <TouchableOpacity activeOpacity={0.9} onPress={openDetail} style={styles.cardTextOverlayBottomLeft}>
-                <Text style={styles.cardProfileName}>{currentProfile.name}, {currentProfile.age}</Text>
-                <Text style={styles.cardProfileJob}>{currentProfile.job}</Text>
-              </TouchableOpacity>
-            </Animated.View>
+                {/* Tap zones: left = prev photo, right = next photo. No drag. */}
+                <View style={styles.tapZoneRow} pointerEvents="box-none">
+                  <Pressable onPress={handlePhotoTapLeft} style={{ flex: 1 }}>
+                    <View style={styles.tapZoneSide} />
+                  </Pressable>
+                  <Pressable onPress={openDetail} style={{ flex: 2 }}>
+                    <View style={styles.tapZoneCenter} />
+                  </Pressable>
+                  <Pressable onPress={handlePhotoTapRight} style={{ flex: 1 }}>
+                    <View style={styles.tapZoneSide} />
+                  </Pressable>
+                </View>
 
-          </Animated.View>
+                <Animated.View style={{ opacity: detailsOpacity, width: '100%', position: 'absolute', bottom: 0 }} pointerEvents="box-none">
+                  <TouchableOpacity activeOpacity={0.9} onPress={openDetail} style={styles.cardTextOverlayBottomLeft}>
+                    <Text style={styles.cardProfileName}>{currentProfile.name}, {currentProfile.age}</Text>
+                    <Text style={styles.cardProfileJob}>{currentProfile.job}</Text>
+                  </TouchableOpacity>
+                </Animated.View>
 
-          {/* Reaction message — shown only when a button is pressed, icon-led, no emoji */}
-          <Animated.View
-            style={[
-              styles.reactionToast,
-              {
-                opacity: likeOpacity,
-                transform: [{
-                  scale: likeOpacity.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] })
-                }],
-              },
-            ]}
-            pointerEvents="none"
-          >
-            <View style={[styles.reactionIconCircle, styles.reactionIconCircleLike]}>
-              <Ionicons name="heart" size={30} color="#fff" />
-            </View>
-            <Text style={styles.reactionTitle}>{LIKE_MESSAGES[likeMsgIdx].title}</Text>
-            <Text style={styles.reactionSubtitle}>{LIKE_MESSAGES[likeMsgIdx].subtitle}</Text>
-          </Animated.View>
+              </Animated.View>
 
-          <Animated.View
-            style={[
-              styles.reactionToast,
-              {
-                opacity: nopeOpacity,
-                transform: [{
-                  scale: nopeOpacity.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] })
-                }],
-              },
-            ]}
-            pointerEvents="none"
-          >
-            <View style={[styles.reactionIconCircle, styles.reactionIconCirclePass]}>
-              <Ionicons name="close" size={30} color="#fff" />
-            </View>
-            <Text style={styles.reactionTitle}>{PASS_MESSAGES[passMsgIdx].title}</Text>
-            <Text style={styles.reactionSubtitle}>{PASS_MESSAGES[passMsgIdx].subtitle}</Text>
-          </Animated.View>
-          </>
+              {/* Reaction message — shown only when a button is pressed, icon-led, no emoji */}
+              <Animated.View
+                style={[
+                  styles.reactionToast,
+                  {
+                    opacity: likeOpacity,
+                    transform: [{
+                      scale: likeOpacity.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] })
+                    }],
+                  },
+                ]}
+                pointerEvents="none"
+              >
+                <View style={[styles.reactionIconCircle, styles.reactionIconCircleLike]}>
+                  <Ionicons name="heart" size={30} color="#fff" />
+                </View>
+                <Text style={styles.reactionTitle}>{LIKE_MESSAGES[likeMsgIdx].title}</Text>
+                <Text style={styles.reactionSubtitle}>{LIKE_MESSAGES[likeMsgIdx].subtitle}</Text>
+              </Animated.View>
+
+              <Animated.View
+                style={[
+                  styles.reactionToast,
+                  {
+                    opacity: nopeOpacity,
+                    transform: [{
+                      scale: nopeOpacity.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] })
+                    }],
+                  },
+                ]}
+                pointerEvents="none"
+              >
+                <View style={[styles.reactionIconCircle, styles.reactionIconCirclePass]}>
+                  <Ionicons name="close" size={30} color="#fff" />
+                </View>
+                <Text style={styles.reactionTitle}>{PASS_MESSAGES[passMsgIdx].title}</Text>
+                <Text style={styles.reactionSubtitle}>{PASS_MESSAGES[passMsgIdx].subtitle}</Text>
+              </Animated.View>
+            </>
           )}
         </View>
 
-        {/* Actions Row — the only way to like/pass now */}
+        {/* Actions Row */}
         <View style={styles.actionsRowContainer}>
           <TouchableOpacity
             onPress={moveToPrevious}
@@ -724,189 +811,36 @@ export default function DiscoverScreen() {
         </View>
       </View>
 
-      {/* Detail Bottom Sheet */}
-      {showDetail && (
-        <Animated.View
-          style={[styles.detailSheet, { transform: [{ translateY: Animated.add(sheetY, sheetDragY) }] }]}
-          {...sheetPanResponder.panHandlers}
-        >
-          {/* Background gradient clipped to sheet border radius */}
-          <View style={styles.detailSheetBgClip} pointerEvents="none">
-            <LinearGradient
-              colors={isDark ? ['#140E2D', '#0A051C'] : ['#F2EBFF', '#FFFFFF']}
-              style={StyleSheet.absoluteFill}
-            />
-          </View>
+      {/* Unified Profile Detail Modal across Discover, Matches & Chat */}
+      <ProfileDetail
+        visible={showDetail}
+        profile={currentProfile}
+        onClose={closeDetail}
+        onLike={() => {
+          closeDetail();
+          moveToNext();
+        }}
+        onPass={() => {
+          closeDetail();
+          moveToPrevious();
+        }}
+        isMatch={false}
+      />
 
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            bounces={false}
-            nestedScrollEnabled={true}
-            scrollEventThrottle={16}
-            contentContainerStyle={{ paddingBottom: 0 }}
-            onScroll={(e) => { sheetScrollY.current = e.nativeEvent.contentOffset.y; }}
-          >
-            {/* Drag handle INSIDE the scroll view so it never blocks scroll */}
-            <View style={styles.sheetHandleWrap}>
-              <View style={styles.sheetHandle} />
-            </View>
-
-            {/* Sliding photo carousel */}
-            <View style={styles.sheetPhotoWrap}>
-              <FlatList
-                data={currentProfile.images}
-                keyExtractor={(item, i) => `${currentProfile?.id || 'p'}-${i}`}
-                horizontal
-                pagingEnabled
-                showsHorizontalScrollIndicator={false}
-                nestedScrollEnabled={true}
-                onMomentumScrollEnd={(e) => {
-                  const activeIndex = Math.round(e.nativeEvent.contentOffset.x / width);
-                  setSheetPhotoIdx(activeIndex);
-                }}
-                renderItem={({ item }) => (
-                  <Image source={{ uri: formatImageUrl(item) }} style={styles.sheetPhoto} resizeMode="cover" />
-                )}
-              />
-              <LinearGradient
-                colors={['transparent', 'rgba(0,0,0,0.25)', 'rgba(0,0,0,0.80)']}
-                style={styles.sheetHeroGrad}
-              />
-              {/* Tag badge */}
-              <View style={styles.sheetHeroTag}>
-                <View style={styles.sheetTagDot} />
-                <Text style={styles.sheetTagTxt}>{currentProfile.tag}</Text>
-              </View>
-              {/* Compat badge */}
-              <View style={styles.sheetHeroCompat}>
-                <Text style={styles.sheetHeroCompatNum}>{currentProfile.compatibility}%</Text>
-                <Text style={styles.sheetHeroCompatLbl}>match</Text>
-              </View>
-              {/* Pagination dots */}
-              {currentProfile.images.length > 1 && (
-                <View style={styles.sheetPhotoDots}>
-                  {currentProfile.images.map((_, i) => (
-                    <View key={i} style={[styles.sheetDot, i === sheetPhotoIdx && styles.sheetDotActive]} />
-                  ))}
-                </View>
-              )}
-              {/* Name overlay */}
-              <View style={styles.sheetHeroNameWrap}>
-                <Text style={styles.sheetHeroName}>{currentProfile.name}, {currentProfile.age}</Text>
-                <Text style={styles.sheetHeroSub}>{currentProfile.job}</Text>
-              </View>
-            </View>
-
-            <View style={styles.sheetBody}>
-              {/* Quick-fact chips */}
-              <View style={styles.quickFactsRow}>
-                <View style={styles.quickFact}>
-                  <Ionicons name="location-outline" size={14} color="#FF007F" />
-                  <Text style={styles.quickFactTxt}>{currentProfile.location}</Text>
-                </View>
-                <View style={styles.quickFact}>
-                  <Ionicons name="navigate-outline" size={14} color="#8A66FF" />
-                  <Text style={styles.quickFactTxt}>{currentProfile.distance}</Text>
-                </View>
-                <View style={styles.quickFact}>
-                  <Ionicons name={currentProfile.gender?.toLowerCase().includes('female') ? 'woman-outline' : 'man-outline'} size={14} color="#4A89FF" />
-                  <Text style={styles.quickFactTxt}>{currentProfile.gender}</Text>
-                </View>
-              </View>
-
-              {/* About */}
-              <View style={styles.sheetCard}>
-                <Text style={styles.sheetCardLabel}>ABOUT</Text>
-                <Text style={styles.sheetBio}>{currentProfile.bio}</Text>
-              </View>
-
-              {/* Interests */}
-              <View style={styles.sheetCard}>
-                <Text style={styles.sheetCardLabel}>INTERESTS</Text>
-                <View style={styles.tagsRow}>
-                  {ensureArray(currentProfile.interests).map((t, i) => (
-                    <View key={i} style={styles.tag}>
-                      <Text style={styles.tagText}>{t}</Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-
-              {/* Lifestyle snapshot */}
-              <View style={styles.sheetCard}>
-                <Text style={styles.sheetCardLabel}>LIFESTYLE</Text>
-                <View style={styles.lifestyleGrid}>
-                  <View style={styles.lifestyleItem}>
-                    <View style={styles.lifestyleIcon}>
-                      <Ionicons name="heart-outline" size={18} color="#FF007F" />
-                    </View>
-                    <Text style={styles.lifestyleLbl}>Looking for</Text>
-                    <Text style={styles.lifestyleVal}>Relationship</Text>
-                  </View>
-                  <View style={styles.lifestyleItem}>
-                    <View style={styles.lifestyleIcon}>
-                      <Ionicons name="fitness-outline" size={18} color="#8A66FF" />
-                    </View>
-                    <Text style={styles.lifestyleLbl}>Exercise</Text>
-                    <Text style={styles.lifestyleVal}>Active</Text>
-                  </View>
-                  <View style={styles.lifestyleItem}>
-                    <View style={styles.lifestyleIcon}>
-                      <Ionicons name="wine-outline" size={18} color="#4A89FF" />
-                    </View>
-                    <Text style={styles.lifestyleLbl}>Drinks</Text>
-                    <Text style={styles.lifestyleVal}>Socially</Text>
-                  </View>
-                  <View style={styles.lifestyleItem}>
-                    <View style={styles.lifestyleIcon}>
-                      <Ionicons name="star-outline" size={18} color="#FFB800" />
-                    </View>
-                    <Text style={styles.lifestyleLbl}>Zodiac</Text>
-                    <Text style={styles.lifestyleVal}>Explore</Text>
-                  </View>
-                </View>
-              </View>
-
-              {/* Mutual friends */}
-              {ensureArray(currentProfile.mutuals).length > 0 && (
-                <View style={styles.sheetCard}>
-                  <Text style={styles.sheetCardLabel}>MUTUAL FRIENDS</Text>
-                  <View style={styles.mutualDetailRow}>
-                    {ensureArray(currentProfile.mutuals).map((av, i) => (
-                      <Image key={i} source={{ uri: av }} style={styles.mutualDetailAv} />
-                    ))}
-                    <Text style={styles.mutualDetailTxt}>
-                      {ensureArray(currentProfile.mutuals).length} mutual friend{ensureArray(currentProfile.mutuals).length > 1 ? 's' : ''}
-                    </Text>
-                  </View>
-                </View>
-              )}
-
-              {/* Actions */}
-              <View style={styles.sheetActions}>
-                <TouchableOpacity
-                  style={styles.sheetBtnPass}
-                  onPress={closeDetail}
-                >
-                  <Ionicons name="close" size={22} color="#FF375F" />
-                  <Text style={styles.sheetBtnPassTxt}>Pass</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.sheetBtnLike}
-                  onPress={closeDetail}
-                >
-                  <LinearGradient colors={['#FF007F', '#B5179E']} style={styles.sheetBtnLikeGrad}>
-                    <Ionicons name="heart" size={20} color="#fff" />
-                    <Text style={styles.sheetBtnLikeTxt}>Like</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-              </View>
-
-              <View style={{ height: 110 }} />
-            </View>
-          </ScrollView>
-        </Animated.View>
-      )}
+      <CustomAlertModal
+        visible={rewindModalVisible}
+        title="Unlock Unlimited Rewinds"
+        message="Swiped past someone special by accident? Rewinding previous profiles is an exclusive feature of HeartLink Plus & Premium plans. Upgrade your subscription plan now to unlock unlimited rewinds!"
+        icon="reload-circle-outline"
+        iconColor="#F59E0B"
+        confirmText="View Plans"
+        cancelText="Maybe Later"
+        onConfirm={() => {
+          setRewindModalVisible(false);
+          navigation.navigate('Plans');
+        }}
+        onCancel={() => setRewindModalVisible(false)}
+      />
     </LinearGradient>
   );
 }
@@ -938,6 +872,10 @@ const getStyles = (theme) => StyleSheet.create({
     borderColor: theme.isDark ? 'rgba(255, 255, 255, 0.28)' : 'rgba(0, 0, 0, 0.12)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  headerRightGroup: {
+    flexDirection: 'row',
+    gap: 10,
   },
   headerRightBtn: {
     width: 38,
@@ -1044,11 +982,20 @@ const getStyles = (theme) => StyleSheet.create({
     shadowRadius: 16,
     elevation: 8,
   },
+  emptyIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: 'rgba(255, 0, 127, 0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   emptyTitle: {
     fontSize: 22,
     fontWeight: '900',
     color: theme.textPrimary,
-    marginTop: 16,
+    marginTop: 10,
     textAlign: 'center',
   },
   emptySub: {
@@ -1060,7 +1007,7 @@ const getStyles = (theme) => StyleSheet.create({
     paddingHorizontal: 10,
   },
   emptyBtn: {
-    marginTop: 24,
+    marginTop: 20,
     borderRadius: 24,
     overflow: 'hidden',
     shadowColor: '#FF007F',
@@ -1079,6 +1026,22 @@ const getStyles = (theme) => StyleSheet.create({
     color: '#FFF',
     fontSize: 14,
     fontWeight: '800',
+  },
+  emptySecondaryBtn: {
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 0, 127, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 0, 127, 0.2)',
+  },
+  emptySecondaryTxt: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#FF007F',
   },
   card: {
     position: 'absolute',
@@ -1165,18 +1128,40 @@ const getStyles = (theme) => StyleSheet.create({
     borderRadius: 3.5,
     backgroundColor: '#FFFFFF',
   },
+  cardMatchBadge: {
+    position: 'absolute',
+    top: 24,
+    right: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 0, 127, 0.85)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+    zIndex: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  cardMatchBadgeTxt: {
+    color: '#FFF',
+    fontSize: 10.5,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
 
   cardTextOverlayBottomLeft: {
     paddingBottom: 24,
-    paddingLeft: 24,
-    paddingRight: 24,
+    paddingHorizontal: 20,
     zIndex: 10,
   },
   cardProfileName: {
     fontFamily: Platform.OS === 'ios' ? 'Helvetica Neue' : 'sans-serif-medium',
     fontSize: 26,
-    fontWeight: '800',
-    color: '#fff',
+    fontWeight: '900',
+    color: '#FFFFFF',
     letterSpacing: -0.6,
     marginBottom: 3,
     textShadowColor: 'rgba(0,0,0,0.6)',
@@ -1197,8 +1182,23 @@ const getStyles = (theme) => StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 20,
+    gap: 14,
     marginVertical: height * 0.015,
+  },
+  actionBtnSmallRewind: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    borderWidth: 1.5,
+    borderColor: '#F59E0B',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#F59E0B',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
   },
   actionBtnSmallX: {
     width: 52,
@@ -1725,7 +1725,7 @@ const getStyles = (theme) => StyleSheet.create({
   },
 
   // Premium empty state
-  emptyWrap:  { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30 },
+  emptyWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30 },
   emptyCard: {
     backgroundColor: theme.glass, borderRadius: 24, padding: 32,
     alignItems: 'center', gap: 12,
@@ -1735,7 +1735,7 @@ const getStyles = (theme) => StyleSheet.create({
     shadowRadius: 8,
   },
   emptyTitle: { fontSize: 20, fontWeight: '800', color: theme.textPrimary },
-  emptySub:   { fontSize: 14, color: theme.textSec, textAlign: 'center', lineHeight: 21 },
+  emptySub: { fontSize: 14, color: theme.textSec, textAlign: 'center', lineHeight: 21 },
   emptyBtn: {
     marginTop: 10,
     borderRadius: 22,

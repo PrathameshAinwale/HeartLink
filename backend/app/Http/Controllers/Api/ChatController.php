@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Message;
 use App\Models\UserReport;
 use App\Models\UserBlock;
+use App\Models\UserMatch;
+use App\Models\Swipe;
 use Illuminate\Http\Request;
 
 class ChatController extends Controller
@@ -31,22 +33,20 @@ class ChatController extends Controller
             ], 403);
         }
 
-        $messages = Message::where(function ($query) use ($authId, $otherUserId) {
-            $query->where('sender_id', $authId)->where('receiver_id', $otherUserId);
-        })->orWhere(function ($query) use ($authId, $otherUserId) {
-            $query->where('sender_id', $otherUserId)->where('receiver_id', $authId);
+        $messages = Message::where(function ($q) use ($authId, $otherUserId) {
+            $q->where('sender_id', $authId)->where('receiver_id', $otherUserId);
+        })->orWhere(function ($q) use ($authId, $otherUserId) {
+            $q->where('sender_id', $otherUserId)->where('receiver_id', $authId);
         })
         ->orderBy('created_at', 'asc')
         ->get();
 
-        // Mark incoming messages as read
         Message::where('sender_id', $otherUserId)
             ->where('receiver_id', $authId)
             ->where('is_read', false)
             ->update(['is_read' => true]);
 
-        // Fetch recipient full user profile for dynamic profile modal
-        $otherUser = \App\Models\User::where('id', $otherUserId)->with('photos')->first();
+        $otherUser = \App\Models\User::with('photos')->find($otherUserId);
 
         return response()->json([
             'messages'         => $messages,
@@ -59,8 +59,16 @@ class ChatController extends Controller
     {
         $authId = $request->user()->id;
 
-        $matches = \App\Models\UserMatch::where('user_1_id', $authId)
-            ->orWhere('user_2_id', $authId)
+        $blockedIds = UserBlock::where('blocker_id', $authId)
+            ->pluck('blocked_user_id')
+            ->merge(UserBlock::where('blocked_user_id', $authId)->pluck('blocker_id'))
+            ->unique();
+
+        $matches = UserMatch::where(function ($q) use ($authId) {
+                $q->where('user_1_id', $authId)->orWhere('user_2_id', $authId);
+            })
+            ->whereNotIn('user_1_id', $blockedIds)
+            ->whereNotIn('user_2_id', $blockedIds)
             ->with(['user1.photos', 'user2.photos'])
             ->get();
 
@@ -114,10 +122,23 @@ class ChatController extends Controller
         ]);
 
         $senderId = $request->user()->id;
+        $receiverId = (int) $validated['receiver_id'];
+
+        $isBlocked = UserBlock::where(function ($q) use ($senderId, $receiverId) {
+            $q->where('blocker_id', $senderId)->where('blocked_user_id', $receiverId);
+        })->orWhere(function ($q) use ($senderId, $receiverId) {
+            $q->where('blocker_id', $receiverId)->where('blocked_user_id', $senderId);
+        })->exists();
+
+        if ($isBlocked) {
+            return response()->json([
+                'message' => 'Cannot send message. User is blocked.',
+            ], 403);
+        }
 
         $message = Message::create([
             'sender_id'   => $senderId,
-            'receiver_id' => $validated['receiver_id'],
+            'receiver_id' => $receiverId,
             'message'     => $validated['message'],
         ]);
 
@@ -127,6 +148,17 @@ class ChatController extends Controller
         ], 201);
     }
 
+    public function getBlockedUsers(Request $request)
+    {
+        $userId = $request->user()->id;
+        $blockedIds = UserBlock::where('blocker_id', $userId)->pluck('blocked_user_id');
+        $users = \App\Models\User::whereIn('id', $blockedIds)->with('photos')->get();
+
+        return response()->json([
+            'blocked_users' => $users,
+        ]);
+    }
+
     public function blockUser(Request $request)
     {
         $validated = $request->validate([
@@ -134,14 +166,29 @@ class ChatController extends Controller
         ]);
 
         $blockerId = $request->user()->id;
+        $blockedUserId = (int) $validated['blocked_user_id'];
 
         $block = UserBlock::firstOrCreate([
             'blocker_id'      => $blockerId,
-            'blocked_user_id' => $validated['blocked_user_id'],
+            'blocked_user_id' => $blockedUserId,
         ]);
 
+        // AUTOMATIC UNMATCH: Remove any match record between blocker and blocked user
+        UserMatch::where(function ($q) use ($blockerId, $blockedUserId) {
+            $q->where('user_1_id', $blockerId)->where('user_2_id', $blockedUserId);
+        })->orWhere(function ($q) use ($blockerId, $blockedUserId) {
+            $q->where('user_1_id', $blockedUserId)->where('user_2_id', $blockerId);
+        })->delete();
+
+        // Delete any swipes between blocker and blocked user
+        Swipe::where(function ($q) use ($blockerId, $blockedUserId) {
+            $q->where('swiper_id', $blockerId)->where('swiped_user_id', $blockedUserId);
+        })->orWhere(function ($q) use ($blockerId, $blockedUserId) {
+            $q->where('swiper_id', $blockedUserId)->where('swiped_user_id', $blockerId);
+        })->delete();
+
         return response()->json([
-            'message' => 'User blocked successfully',
+            'message' => 'User blocked and unmatched successfully',
             'block'   => $block,
         ]);
     }

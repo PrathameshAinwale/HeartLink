@@ -677,10 +677,16 @@ export default function ChatDetailScreen() {
   const handleConfirmBlock = () => {
     setShowBlockModal(false);
     setIsBlocked(true);
-    triggerCustomToast(`${activeUser.name} has been blocked successfully.`);
+    triggerCustomToast(`${activeUser.name} has been blocked and unmatched.`);
 
     if (activeUser && activeUser.id) {
-      apiBlockUser(activeUser.id).catch((error) => {
+      apiBlockUser(activeUser.id).then(() => {
+        setTimeout(() => {
+          if (navigation.canGoBack()) {
+            navigation.goBack();
+          }
+        }, 1000);
+      }).catch((error) => {
         console.log('Block API error:', error);
       });
     }
@@ -800,23 +806,11 @@ export default function ChatDetailScreen() {
 
                 <View style={styles.headerInfo}>
                   <Text style={styles.headerName}>{activeUser.name}</Text>
-                  <View style={styles.onlineRow}>
-                    {isOtherTyping ? (
-                      <>
-                        <View style={[styles.onlineDot, { backgroundColor: '#30D158' }]} />
-                        <Text style={[styles.onlineText, { color: '#30D158', fontWeight: '700' }]}>
-                          typing...
-                        </Text>
-                      </>
-                    ) : (
-                      <>
-                        {activeUser.online && <View style={styles.onlineDot} />}
-                        <Text style={styles.onlineText}>
-                          {activeUser.online ? 'Online now' : 'Offline'}
-                        </Text>
-                      </>
-                    )}
-                  </View>
+                  {isOtherTyping ? (
+                    <Text style={[styles.onlineText, { color: '#30D158', fontWeight: '700' }]}>
+                      typing...
+                    </Text>
+                  ) : null}
                 </View>
               </TouchableOpacity>
 
@@ -974,102 +968,40 @@ export default function ChatDetailScreen() {
                 </TouchableOpacity>
               </View>
             ) : (
-              <>
-                <View style={styles.inputRow}>
-                  <TouchableOpacity
-                    style={styles.emojiToggleBtn}
-                    onPress={() => {
-                      setShowEmojiPicker((p) => !p);
-                      Keyboard.dismiss();
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons
-                      name={showEmojiPicker ? "keypad-outline" : "happy-outline"}
-                      size={22}
-                      color={showEmojiPicker ? '#FF007F' : theme.textFaint}
-                    />
-                  </TouchableOpacity>
-
-                  <View style={styles.inputWrap}>
-                    <TextInput
-                      ref={inputRef}
-                      style={styles.input}
-                      placeholder="Type message…"
-                      placeholderTextColor={theme.textFaint}
-                      value={input}
-                      onChangeText={setInput}
-                      onFocus={() => setShowEmojiPicker(false)}
-                      multiline
-                    />
-                  </View>
-
-                  <TouchableOpacity
-                    onPress={send}
-                    onPressIn={onSendPressIn}
-                    onPressOut={onSendPressOut}
-                    activeOpacity={0.9}
-                    style={styles.sendBtn}
-                    disabled={isSending || !input.trim()}
-                  >
-                    <Animated.View style={{ flex: 1, transform: [{ scale: sendScale }] }}>
-                      <LinearGradient
-                        colors={theme.gradientAccent}
-                        style={[
-                          styles.sendGrad,
-                          (!input.trim() || isSending) && styles.sendGradDisabled,
-                        ]}
-                      >
-                        <Ionicons name="send" size={15} color="#fff" />
-                      </LinearGradient>
-                    </Animated.View>
-                  </TouchableOpacity>
+              <View style={styles.inputRow}>
+                <View style={styles.inputWrap}>
+                  <TextInput
+                    ref={inputRef}
+                    style={styles.input}
+                    placeholder="Type message…"
+                    placeholderTextColor={theme.textFaint}
+                    value={input}
+                    onChangeText={setInput}
+                    multiline
+                  />
                 </View>
 
-                {showEmojiPicker && (
-                  <View style={styles.emojiPickerContainer}>
-                    <View style={styles.emojiCategoryRow}>
-                      {EMOJI_CATEGORIES.map((cat, idx) => (
-                        <TouchableOpacity
-                          key={cat.name}
-                          style={[
-                            styles.emojiCategoryTab,
-                            activeEmojiCategory === idx && styles.emojiCategoryTabActive,
-                          ]}
-                          onPress={() => setActiveEmojiCategory(idx)}
-                        >
-                          <Text style={styles.emojiCategoryIcon}>{cat.icon}</Text>
-                          <Text
-                            style={[
-                              styles.emojiCategoryName,
-                              activeEmojiCategory === idx && styles.emojiCategoryNameActive,
-                            ]}
-                          >
-                            {cat.name}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-
-                    <ScrollView
-                      contentContainerStyle={styles.emojiGrid}
-                      keyboardShouldPersistTaps="always"
-                      showsVerticalScrollIndicator={false}
+                <TouchableOpacity
+                  onPress={send}
+                  onPressIn={onSendPressIn}
+                  onPressOut={onSendPressOut}
+                  activeOpacity={0.9}
+                  style={styles.sendBtn}
+                  disabled={isSending || !input.trim()}
+                >
+                  <Animated.View style={{ flex: 1, transform: [{ scale: sendScale }] }}>
+                    <LinearGradient
+                      colors={theme.gradientAccent}
+                      style={[
+                        styles.sendGrad,
+                        (!input.trim() || isSending) && styles.sendGradDisabled,
+                      ]}
                     >
-                      {EMOJI_CATEGORIES[activeEmojiCategory].emojis.map((emoji, idx) => (
-                        <TouchableOpacity
-                          key={idx}
-                          style={styles.emojiItem}
-                          onPress={() => handleAddEmoji(emoji)}
-                          activeOpacity={0.6}
-                        >
-                          <Text style={styles.emojiText}>{emoji}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
-                  </View>
-                )}
-              </>
+                      <Ionicons name="send" size={15} color="#fff" />
+                    </LinearGradient>
+                  </Animated.View>
+                </TouchableOpacity>
+              </View>
             )}
           </SafeAreaView>
         </View>

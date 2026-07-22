@@ -166,9 +166,9 @@ export default function MainTabNavigator() {
     >
       <Tab.Screen name="Discover"  component={DiscoverScreen}    />
       <Tab.Screen name="Matches"   component={MatchesScreen}     />
+      <Tab.Screen name="Chat"      component={ChatScreen}        />
       <Tab.Screen name="Date"      component={DatePlannerScreen} />
       <Tab.Screen name="Vibes"     component={VibesScreen}       />
-      <Tab.Screen name="Chat"      component={ChatScreen}        />
     </Tab.Navigator>
   );
 }

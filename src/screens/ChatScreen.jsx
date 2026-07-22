@@ -73,7 +73,6 @@ export default function ChatScreen() {
       {/* Avatar */}
       <View style={styles.avatarWrap}>
         <Image source={{ uri: item.image }} style={styles.avatar} />
-        {item.online && <View style={styles.onlineDot} />}
       </View>
 
       {/* Info */}

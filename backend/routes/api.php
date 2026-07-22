@@ -30,6 +30,7 @@ Route::prefix('v1')->group(function () {
 
         // Matches & Requests
         Route::get('/matches',                         [MatchController::class, 'index']);
+        Route::post('/matches/unmatch',                [MatchController::class, 'unmatch']);
         Route::get('/requests',                        [MatchController::class, 'requests']);
         Route::post('/requests/{userId}/accept',       [RequestController::class, 'accept']);
         Route::post('/requests/{userId}/decline',      [RequestController::class, 'decline']);
@@ -43,9 +44,14 @@ Route::prefix('v1')->group(function () {
         Route::get('/chats',               [ChatController::class, 'conversations']);
         Route::get('/chats/{otherUserId}', [ChatController::class, 'getMessages']);
         Route::post('/chats/send',         [ChatController::class, 'sendMessage']);
+        Route::get('/users/blocked',       [ChatController::class, 'getBlockedUsers']);
         Route::post('/users/block',        [ChatController::class, 'blockUser']);
         Route::post('/users/unblock',      [ChatController::class, 'unblockUser']);
         Route::post('/users/report',       [ChatController::class, 'reportUser']);
+
+        // Account Management
+        Route::post('/user/deactivate',    [AuthController::class, 'deactivateAccount']);
+        Route::delete('/user/account',     [AuthController::class, 'deleteAccount']);
 
         // Date Planner
         Route::get('/restaurants',         [DatePlannerController::class, 'getRestaurants']);

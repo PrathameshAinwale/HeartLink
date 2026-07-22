@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import ProfileDetail from '../components/discovery/ProfileDetail';
-import { apiGetMatches, apiGetRequests } from '../services/api';
+import { apiGetMatches, apiGetRequests, apiUnmatchUser, apiBlockUser } from '../services/api';
 import { ensureArray, formatImageUrl } from '../utils/helpers';
 
 const { width, height } = Dimensions.get('window');
@@ -96,6 +96,7 @@ export default function MatchesScreen() {
 
   const unmatch = (id) => {
     setMatches(p => p.filter(m => m.id !== id));
+    apiUnmatchUser(id).catch(() => {});
   };
 
   const startChat = (id) => {

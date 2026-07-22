@@ -10,6 +10,7 @@ import ProfileScreen    from '../screens/ProfileScreen';
 import RequestsScreen   from '../screens/RequestsScreen';
 import RestaurantDetailScreen from '../screens/RestaurantDetailScreen';
 import PlansScreen from '../screens/PlansScreen';
+import SettingsScreen from '../screens/SettingsScreen';
 import { ActivityIndicator, View } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../theme/ThemeContext';
@@ -50,6 +51,7 @@ export default function AppNavigator() {
               <Stack.Screen name="Requests"   component={RequestsScreen} />
               <Stack.Screen name="RestaurantDetail" component={RestaurantDetailScreen} />
               <Stack.Screen name="Plans"      component={PlansScreen} options={{ presentation: 'modal' }} />
+              <Stack.Screen name="Settings"   component={SettingsScreen} />
             </>
           ) : (
             <Stack.Screen

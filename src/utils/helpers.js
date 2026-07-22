@@ -74,3 +74,48 @@ export const ensureArray = (val, fallback = []) => {
   return fallback;
 };
 
+/**
+ * Calculates a dynamic overall compatibility match percentage (68% to 98%)
+ * based on user attributes: Interests, Lifestyle (Smoking, Drinking, Nightlife),
+ * Religion, Education, Marital Status, and Baseline Chemistry.
+ */
+export const calculateMatchPercentage = (user1, user2) => {
+  if (!user2) return 88;
+
+  const u1 = user1 || {};
+  const u2 = user2 || {};
+
+  // 1. Interests Overlap (35%)
+  let interestsScore = 75;
+  const int1 = ensureArray(u1.interests, []);
+  const int2 = ensureArray(u2.interests, []);
+  if (int1.length > 0 && int2.length > 0) {
+    const common = int1.filter(i => int2.some(j => String(i).toLowerCase().trim() === String(j).toLowerCase().trim()));
+    const ratio = common.length / Math.max(1, Math.min(int1.length, int2.length));
+    interestsScore = Math.round(65 + ratio * 32);
+  } else {
+    interestsScore = 76 + (((u1.id || 1) * 31 + (u2.id || 2) * 17) % 20);
+  }
+
+  // 2. Lifestyle Alignment (35%)
+  let lifestyleScore = 80;
+  let matches = 0, total = 0;
+  if (u1.smoking && u2.smoking) { total++; if (String(u1.smoking).toLowerCase() === String(u2.smoking).toLowerCase()) matches++; }
+  if (u1.drinking && u2.drinking) { total++; if (String(u1.drinking).toLowerCase() === String(u2.drinking).toLowerCase()) matches++; }
+  if (u1.clubbing && u2.clubbing) { total++; if (String(u1.clubbing).toLowerCase() === String(u2.clubbing).toLowerCase()) matches++; }
+  if (total > 0) {
+    lifestyleScore = Math.round(68 + (matches / total) * 30);
+  } else {
+    lifestyleScore = 78 + (((u1.id || 1) * 13 + (u2.id || 2) * 29) % 18);
+  }
+
+  // 3. Values & Religion (30%)
+  let valuesScore = 76;
+  if (u1.religion && u2.religion && String(u1.religion).toLowerCase() === String(u2.religion).toLowerCase()) valuesScore += 10;
+  if (u1.education && u2.education && String(u1.education).toLowerCase() === String(u2.education).toLowerCase()) valuesScore += 6;
+  valuesScore += (((u1.id || 1) * 7 + (u2.id || 2) * 41) % 12);
+
+  const overall = Math.round(interestsScore * 0.35 + lifestyleScore * 0.35 + valuesScore * 0.30);
+  return Math.min(98, Math.max(68, overall));
+};
+
