@@ -122,7 +122,7 @@ export const apiFetch = async (endpoint, options = {}) => {
 };
 
 // ─── Image Upload Helper ─────────────────────────────────────────────
-export const apiUploadImage = async (imageUri) => {
+export const apiUploadImage = async (imageUri, extraParams = {}) => {
   if (!imageUri || typeof imageUri !== 'string') return imageUri;
 
   // If already an HTTP / HTTPS URL, return as is
@@ -130,34 +130,115 @@ export const apiUploadImage = async (imageUri) => {
     return imageUri;
   }
 
+  // Web browser security prevents fetch() on native device file:// or content:// URIs
+  if (Platform.OS === 'web' && (imageUri.startsWith('file://') || imageUri.startsWith('content://'))) {
+    console.warn('[Upload Image]: Web browser cannot access native device file:// URI directly:', imageUri);
+    return null;
+  }
+
+  // If already a Base64 Data URI (e.g. data:image/jpeg;base64,...), post directly as JSON payload!
+  if (imageUri.startsWith('data:image/')) {
+    try {
+      const bodyPayload = { image: imageUri, ...extraParams };
+      const res = await apiFetch('/upload-image', {
+        method: 'POST',
+        body: bodyPayload,
+      });
+
+      if (res?.url) {
+        console.log('[Upload Image Base64 Data Success]:', res.url);
+        return res.url;
+      }
+    } catch (b64Err) {
+      console.warn('[Upload Image Base64 Data Error]:', b64Err?.message);
+    }
+  }
+
+  // Strategy 1: On Native Mobile (Android / iOS), try FormData multipart upload first
+  if (Platform.OS !== 'web') {
+    try {
+      const formData = new FormData();
+      const filename = imageUri.split('/').pop()?.split('?')[0] || `photo_${Date.now()}.jpg`;
+      const match = /\.(\w+)$/.exec(filename);
+      const ext = match ? match[1].toLowerCase() : 'jpeg';
+      const type = `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+
+      formData.append('image', {
+        uri: Platform.OS === 'android' ? imageUri : imageUri.replace('file://', ''),
+        name: filename,
+        type: type,
+      });
+
+      if (extraParams.user_id) formData.append('user_id', extraParams.user_id);
+      if (extraParams.email) formData.append('email', extraParams.email);
+
+      const res = await apiFetch('/upload-image', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (res?.url) {
+        console.log('[Upload Image FormData Success]:', res.url);
+        return res.url;
+      }
+    } catch (fdErr) {
+      console.warn('[Upload Image FormData Warning, trying base64]:', fdErr?.message);
+    }
+  }
+
+  // Strategy 2: Base64 Upload (for Web, or as fallback on Native)
   try {
     let base64Data = null;
 
     if (Platform.OS === 'web') {
-      const response = await fetch(imageUri);
-      const blob = await response.blob();
-      base64Data = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
+      if (imageUri.startsWith('blob:') || imageUri.startsWith('data:')) {
+        const response = await fetch(imageUri);
+        const blob = await response.blob();
+        base64Data = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      } else {
+        return imageUri;
+      }
     } else {
-      const base64Str = await FileSystem.readAsStringAsync(imageUri, {
-        encoding: 'base64',
-      });
-      const ext = imageUri.split('.').pop() || 'jpg';
-      base64Data = `data:image/${ext};base64,${base64Str}`;
+      try {
+        const base64Str = await FileSystem.readAsStringAsync(imageUri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        const rawExt = (imageUri.split('.').pop() || 'jpg').split('?')[0].toLowerCase();
+        const ext = (rawExt === 'png' || rawExt === 'webp') ? rawExt : 'jpeg';
+        base64Data = `data:image/${ext};base64,${base64Str}`;
+      } catch (fsErr) {
+        console.warn('[Upload Image FS Warning]:', fsErr?.message);
+        const response = await fetch(imageUri);
+        const blob = await response.blob();
+        base64Data = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      }
     }
 
     if (!base64Data) return imageUri;
 
+    const bodyPayload = { image: base64Data, ...extraParams };
+
     const res = await apiFetch('/upload-image', {
       method: 'POST',
-      body: { image: base64Data },
+      body: bodyPayload,
     });
 
-    return res?.url || imageUri;
+    if (res?.url) {
+      console.log('[Upload Image Base64 Success]:', res.url);
+      return res.url;
+    }
+
+    return imageUri;
   } catch (err) {
     console.warn('[Upload Image Warning]:', err?.message);
     return imageUri;

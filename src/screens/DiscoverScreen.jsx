@@ -116,7 +116,7 @@ export default function DiscoverScreen() {
     let userPhotos = [];
     const photosArr = ensureArray(u.photos);
     if (photosArr.length > 0) {
-      userPhotos = photosArr.map(p => (typeof p === 'string' ? p : p.photo_url || p.uri)).filter(Boolean);
+      userPhotos = photosArr.map(p => (typeof p === 'string' ? p : (p ? (p.photo_url || p.uri) : null))).filter(Boolean);
     }
     if (u.avatar && !userPhotos.includes(u.avatar)) {
       userPhotos.unshift(u.avatar);

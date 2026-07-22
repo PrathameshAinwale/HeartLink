@@ -32,7 +32,7 @@ export default function RequestsScreen() {
       if (res?.requests && Array.isArray(res.requests)) {
         const apiList = res.requests.map(u => {
           const rawAvatar = u.avatar || (u.photos && u.photos[0]?.photo_url) || '';
-          const rawPhotos = ensureArray(u.photos?.map(p => (typeof p === 'string' ? p : p.photo_url || p.uri)).filter(Boolean));
+          const rawPhotos = ensureArray(u.photos?.map(p => (typeof p === 'string' ? p : (p ? (p.photo_url || p.uri) : null))).filter(Boolean));
           if (u.avatar && !rawPhotos.includes(u.avatar)) rawPhotos.unshift(u.avatar);
           const formattedPhotos = rawPhotos.map(p => formatImageUrl(p)).filter(Boolean);
 

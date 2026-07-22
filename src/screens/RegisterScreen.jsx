@@ -413,11 +413,14 @@ function StepPhotos({ data, onChange }) {
       mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [4, 5],
-      quality: 0.8,
+      quality: 0.5,
+      base64: true,
     });
-    if (!res.canceled && res.assets[0].uri) {
+    if (!res.canceled && res.assets[0]) {
+      const asset = res.assets[0];
+      const payload = asset.base64 ? `data:${asset.mimeType || 'image/jpeg'};base64,${asset.base64}` : asset.uri;
       const next = [...images];
-      next[idx] = res.assets[0].uri;
+      next[idx] = payload;
       onChange('images', next);
     }
   };
@@ -690,7 +693,7 @@ export default function RegisterScreen() {
 
       // Upload local images to backend server public storage
       const rawImages = (data.images || []).filter(x => !!x);
-      Promise.all(rawImages.map(img => apiUploadImage(img)))
+      Promise.all(rawImages.map(img => apiUploadImage(img, { email: data.email, user_id: data.email ? data.email.split('@')[0] : null })))
         .then((uploadedPhotos) => {
           const validPhotos = uploadedPhotos.filter(Boolean);
           const avatarUrl = validPhotos[0] || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400';

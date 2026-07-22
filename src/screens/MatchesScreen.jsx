@@ -32,7 +32,7 @@ export default function MatchesScreen() {
         const apiList = mRes.matches.map(m => {
           const u = m.user || {};
           const rawImg = u.avatar || (u.photos && u.photos[0]?.photo_url) || '';
-          const rawPhotos = ensureArray(u.photos?.map(p => (typeof p === 'string' ? p : p.photo_url || p.uri)).filter(Boolean));
+          const rawPhotos = ensureArray(u.photos?.map(p => (typeof p === 'string' ? p : (p ? (p.photo_url || p.uri) : null))).filter(Boolean));
           if (u.avatar && !rawPhotos.includes(u.avatar)) rawPhotos.unshift(u.avatar);
           const formattedPhotos = rawPhotos.map(p => formatImageUrl(p)).filter(Boolean);
 

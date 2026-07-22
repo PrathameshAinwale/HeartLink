@@ -48,7 +48,7 @@ export default function ProfileScreen() {
     const uImages = ensureArray(user.images);
 
     if (uPhotos.length > 0) {
-      photos = uPhotos.map(p => (typeof p === 'string' ? p : p.photo_url || p.uri)).filter(Boolean);
+      photos = uPhotos.map(p => (typeof p === 'string' ? p : (p ? (p.photo_url || p.uri) : null))).filter(Boolean);
     } else if (uImages.length > 0) {
       photos = uImages.filter(Boolean);
     }
@@ -68,7 +68,7 @@ export default function ProfileScreen() {
   const profileUser = useMemo(() => {
     const u = user || {};
     const cityState = u.city ? `${u.city}${u.state ? ', ' + u.state : ''}` : (u.location || 'Chicago, IL');
-    
+
     return {
       name: u.name || 'Alex Rivera',
       age: u.age || 26,
@@ -82,37 +82,7 @@ export default function ProfileScreen() {
     };
   }, [user]);
 
-  // Auto-sync: If user has local file:// URIs stored before upload was enabled, upload them to server now
-  useEffect(() => {
-    const syncLocalPhotosToBackend = async () => {
-      if (!user?.id) return;
-      const currentPhotos = ensureArray(user.photos?.map(p => (typeof p === 'string' ? p : p.photo_url || p.uri)), []);
-      const currentAvatar = user.avatar || '';
 
-      const hasLocalFile = currentAvatar.startsWith('file://') || currentPhotos.some(p => typeof p === 'string' && p.startsWith('file://'));
-      if (!hasLocalFile) return;
-
-      try {
-        const uploadedAvatar = currentAvatar.startsWith('file://') ? await apiUploadImage(currentAvatar) : currentAvatar;
-        const uploadedPhotos = await Promise.all(
-          currentPhotos.map(p => (typeof p === 'string' && p.startsWith('file://')) ? apiUploadImage(p) : p)
-        );
-
-        const updatedPayload = {
-          avatar: uploadedAvatar,
-          photos: uploadedPhotos,
-          images: uploadedPhotos,
-        };
-
-        updateUser(updatedPayload);
-        await updateUserProfile(user.id, updatedPayload);
-      } catch (err) {
-        console.warn('Auto-sync photo upload error:', err?.message);
-      }
-    };
-
-    syncLocalPhotosToBackend();
-  }, [user?.id]);
 
   // State for Edit Modal
   const [isEditing, setIsEditing] = useState(false);
@@ -150,7 +120,8 @@ export default function ProfileScreen() {
           mediaTypes: ['images'],
           allowsEditing: true, // Native pan, zoom, scale & crop tool
           aspect: [4, 5],       // Standard 4:5 portrait dating ratio
-          quality: 0.9,
+          quality: 0.5,
+          base64: true,
         });
       } else {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -163,17 +134,33 @@ export default function ProfileScreen() {
           mediaTypes: ['images'],
           allowsEditing: true, // Native pan, zoom, scale & crop tool
           aspect: [4, 5],
-          quality: 0.9,
+          quality: 0.5,
+          base64: true,
         });
       }
 
-      if (!result.canceled && result.assets && result.assets[0]?.uri) {
-        const localUri = result.assets[0].uri;
-        const uploadedUrl = await apiUploadImage(localUri);
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const asset = result.assets[0];
+        let imagePayload = asset.uri;
+        if (asset.base64) {
+          const mime = asset.mimeType || 'image/jpeg';
+          imagePayload = `data:${mime};base64,${asset.base64}`;
+        }
 
-        const nextPhotos = [uploadedUrl, ...allPhotos.filter(p => p !== uploadedUrl && p !== localUri)];
+        const uploadedUrl = await apiUploadImage(imagePayload, { user_id: user?.id, email: user?.email });
+
+        if (!uploadedUrl || typeof uploadedUrl !== 'string' || uploadedUrl.startsWith('file://') || uploadedUrl.startsWith('content://')) {
+          setErrorMsg('Failed to upload profile photo to server. Please try again.');
+          setErrorAlertVisible(true);
+          return;
+        }
+
+        const cleanPrevious = allPhotos.filter(p => typeof p === 'string' && !p.startsWith('file://') && !p.startsWith('content://') && p !== uploadedUrl && p !== asset.uri);
+        const validUploaded = uploadedUrl;
+        const nextPhotos = [validUploaded, ...cleanPrevious];
+
         const updatedPayload = {
-          avatar: uploadedUrl,
+          avatar: validUploaded,
           photos: nextPhotos,
           images: nextPhotos,
         };
@@ -290,7 +277,7 @@ export default function ProfileScreen() {
             <TouchableOpacity style={styles.glassBtn} onPress={handleBack} activeOpacity={0.7}>
               <Ionicons name="chevron-back" size={20} color="#fff" />
             </TouchableOpacity>
-            
+
             <View style={styles.headerRightActions}>
               <TouchableOpacity style={styles.glassBtn} onPress={toggleTheme} activeOpacity={0.7}>
                 <Ionicons name={isDark ? "sunny-outline" : "moon-outline"} size={18} color="#fff" />
@@ -327,7 +314,7 @@ export default function ProfileScreen() {
 
         {/* Profile Details Container */}
         <View style={styles.profileBody}>
-          
+
           {/* Header Info & Edit Profile Button */}
           <View style={styles.topInfoRow}>
             <View style={styles.nameContainer}>
@@ -342,7 +329,7 @@ export default function ProfileScreen() {
             </View>
 
             <TouchableOpacity style={styles.editBtn} onPress={handleOpenEdit} activeOpacity={0.85}>
-              <LinearGradient colors={theme.gradientAccent} start={{ x:0, y:0 }} end={{ x:1, y:0 }} style={styles.editBtnGrad}>
+              <LinearGradient colors={theme.gradientAccent} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.editBtnGrad}>
                 <Ionicons name="create-outline" size={14} color="#fff" />
                 <Text style={styles.editBtnText}>Edit</Text>
               </LinearGradient>
@@ -535,7 +522,7 @@ export default function ProfileScreen() {
 
             {/* Save Button */}
             <TouchableOpacity style={styles.saveBtn} onPress={handleSaveProfile} disabled={saving} activeOpacity={0.85}>
-              <LinearGradient colors={theme.gradientAccent} start={{ x:0, y:0 }} end={{ x:1, y:0 }} style={styles.saveBtnGrad}>
+              <LinearGradient colors={theme.gradientAccent} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.saveBtnGrad}>
                 <Text style={styles.saveBtnText}>{saving ? 'Saving Changes...' : 'Save Profile Changes'}</Text>
               </LinearGradient>
             </TouchableOpacity>

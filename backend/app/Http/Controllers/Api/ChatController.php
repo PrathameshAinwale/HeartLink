@@ -45,9 +45,13 @@ class ChatController extends Controller
             ->where('is_read', false)
             ->update(['is_read' => true]);
 
+        // Fetch recipient full user profile for dynamic profile modal
+        $otherUser = \App\Models\User::where('id', $otherUserId)->with('photos')->first();
+
         return response()->json([
             'messages'         => $messages,
             'is_blocked_by_me' => $isBlockedByMe,
+            'other_user'       => $otherUser,
         ]);
     }
 

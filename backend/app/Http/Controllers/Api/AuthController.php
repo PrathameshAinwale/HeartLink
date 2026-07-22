@@ -123,7 +123,7 @@ class AuthController extends Controller
 
         $user->update($validated);
 
-        if ($request->has('avatar') && !empty($request->avatar)) {
+        if ($request->has('avatar') && !empty($request->avatar) && !str_starts_with($request->avatar, 'file://') && !str_starts_with($request->avatar, 'content://')) {
             $photoExists = ProfilePhoto::where('user_id', $user->id)
                 ->where('photo_url', $request->avatar)
                 ->exists();
@@ -141,15 +141,20 @@ class AuthController extends Controller
         }
 
         if ($request->has('photos') && is_array($request->photos) && count($request->photos) > 0) {
-            ProfilePhoto::where('user_id', $user->id)->delete();
-            foreach ($request->photos as $idx => $photoUrl) {
-                if (!empty($photoUrl)) {
+            $validPhotos = array_filter($request->photos, function ($url) {
+                return is_string($url) && !empty($url) && !str_starts_with($url, 'file://') && !str_starts_with($url, 'content://');
+            });
+            if (count($validPhotos) > 0) {
+                ProfilePhoto::where('user_id', $user->id)->delete();
+                $idx = 0;
+                foreach ($validPhotos as $photoUrl) {
                     ProfilePhoto::create([
                         'user_id'    => $user->id,
                         'photo_url'  => $photoUrl,
                         'is_primary' => $idx === 0,
                         'sort_order' => $idx,
                     ]);
+                    $idx++;
                 }
             }
         }
@@ -164,35 +169,52 @@ class AuthController extends Controller
     {
         $imageUrl = null;
 
+        // Determine specific user folder name
+        $user = $request->user('sanctum') ?? auth('sanctum')->user() ?? $request->user();
+        if ($user) {
+            $folderName = 'user_' . $user->id;
+        } elseif ($request->has('user_id') && !empty($request->input('user_id'))) {
+            $folderName = 'user_' . preg_replace('/[^a-zA-Z0-9_-]/', '', $request->input('user_id'));
+        } elseif ($request->has('email') && !empty($request->input('email'))) {
+            $folderName = 'user_' . \Illuminate\Support\Str::slug(explode('@', $request->input('email'))[0]);
+        } else {
+            $folderName = 'user_guest';
+        }
+
+        $uploadPath = public_path('uploads/' . $folderName);
+        if (!file_exists($uploadPath)) {
+            mkdir($uploadPath, 0777, true);
+        }
+
         if ($request->hasFile('image')) {
             $file = $request->file('image');
-            $extension = $file->getClientOriginalExtension() ?: 'jpg';
-            $filename = time() . '_' . \Illuminate\Support\Str::random(10) . '.' . $extension;
-
-            $uploadPath = public_path('uploads');
-            if (!file_exists($uploadPath)) {
-                mkdir($uploadPath, 0777, true);
+            $extension = strtolower($file->getClientOriginalExtension() ?: 'jpg');
+            if (!in_array($extension, ['jpeg', 'jpg', 'png', 'webp', 'heic'])) {
+                $extension = 'jpg';
             }
+            if ($extension === 'jpeg') $extension = 'jpg';
+            $filename = time() . '_' . \Illuminate\Support\Str::random(10) . '.' . $extension;
             $file->move($uploadPath, $filename);
 
-            $imageUrl = $request->schemeAndHttpHost() . '/uploads/' . $filename;
+            $imageUrl = $request->schemeAndHttpHost() . '/uploads/' . $folderName . '/' . $filename;
         } elseif ($request->has('image') && is_string($request->input('image'))) {
-            $raw = $request->input('image');
+            $raw = trim($request->input('image'));
             $ext = 'jpg';
-            if (preg_match('/^data:image\/(\w+);base64,/', $raw, $type)) {
+
+            if (preg_match('/^data:image\/([a-zA-Z0-9\+\-]+);base64,/', $raw, $type)) {
                 $raw = substr($raw, strpos($raw, ',') + 1);
                 $ext = strtolower($type[1]);
                 if ($ext === 'jpeg') $ext = 'jpg';
+            } elseif (str_contains($raw, ',')) {
+                $raw = substr($raw, strpos($raw, ',') + 1);
             }
-            $data = base64_decode($raw);
-            if ($data !== false) {
+
+            $cleanData = preg_replace('/\s+/', '', $raw);
+            $data = base64_decode($cleanData);
+            if ($data !== false && strlen($data) > 0) {
                 $filename = time() . '_' . \Illuminate\Support\Str::random(10) . '.' . $ext;
-                $uploadPath = public_path('uploads');
-                if (!file_exists($uploadPath)) {
-                    mkdir($uploadPath, 0777, true);
-                }
                 file_put_contents($uploadPath . '/' . $filename, $data);
-                $imageUrl = $request->schemeAndHttpHost() . '/uploads/' . $filename;
+                $imageUrl = $request->schemeAndHttpHost() . '/uploads/' . $folderName . '/' . $filename;
             }
         }
 
@@ -203,6 +225,7 @@ class AuthController extends Controller
         return response()->json([
             'message' => 'Image uploaded successfully',
             'url'     => $imageUrl,
+            'folder'  => $folderName,
         ]);
     }
 

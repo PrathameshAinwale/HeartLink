@@ -29,6 +29,7 @@ import {
   apiReportUser,
   apiGetMessages,
 } from '../services/api';
+import { ensureArray, formatImageUrl } from '../utils/helpers';
 
 const { width, height } = Dimensions.get('window');
 
@@ -324,16 +325,30 @@ export default function ChatDetailScreen() {
         }
 
         const recipientObj =
-          response?.user || response?.recipient || response?.other_user;
+          response?.other_user || response?.user || response?.recipient;
         if (recipientObj && recipientObj.name) {
+          const rawAvatar = recipientObj.avatar || (recipientObj.photos && recipientObj.photos[0]?.photo_url) || '';
+          const rawPhotos = ensureArray(recipientObj.photos?.map(p => (typeof p === 'string' ? p : (p ? (p.photo_url || p.uri) : null))).filter(Boolean));
+          if (recipientObj.avatar && !rawPhotos.includes(recipientObj.avatar)) rawPhotos.unshift(recipientObj.avatar);
+          const formattedPhotos = rawPhotos.map(p => formatImageUrl(p)).filter(Boolean);
+
           setActiveUser((prev) => ({
             ...prev,
+            id: recipientObj.id || prev.id,
             name: recipientObj.name || prev.name,
-            image: recipientObj.avatar || recipientObj.image || prev.image,
+            age: recipientObj.age || prev.age || 24,
+            job: recipientObj.job || prev.job || 'Member',
+            bio: recipientObj.bio || prev.bio || 'Connected on HeartLink.',
+            location: recipientObj.city ? `${recipientObj.city}${recipientObj.state ? ', ' + recipientObj.state : ''}` : (prev.location || 'Nearby'),
+            distance: prev.distance || 'Recently matched',
+            compatibility: recipientObj.compatibility_score || prev.compatibility || 90,
+            image: formatImageUrl(rawAvatar) || prev.image,
+            images: formattedPhotos.length > 0 ? formattedPhotos : [formatImageUrl(rawAvatar) || prev.image],
+            interests: ensureArray(recipientObj.interests, prev.interests || ['Travel', 'Music', 'Photography']),
             online:
-              recipientObj.online !== undefined
-                ? recipientObj.online
-                : prev.online,
+              recipientObj.is_online !== undefined
+                ? Boolean(recipientObj.is_online)
+                : (recipientObj.online !== undefined ? recipientObj.online : prev.online),
           }));
         }
 
@@ -867,24 +882,19 @@ export default function ChatDetailScreen() {
         </View>
       </KeyboardAvoidingView>
 
-      {/* Profile Detail Modal (Matches & Requests style popup) */}
+      {/* Unified Profile Detail Modal (Identical popup to Matches & Requests screens) */}
       <ProfileDetail
         visible={showProfileModal}
-        profile={{
-          id: activeUser.id,
-          name: activeUser.name || 'Match User',
-          age: activeUser.age || 24,
-          job: activeUser.job || 'Member',
-          bio: activeUser.bio || 'Connected on HeartLink.',
-          location: activeUser.location || 'Nearby',
-          distance: activeUser.distance || '2 km away',
-          compatibility: activeUser.compatibility || 90,
-          image: activeUser.image || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800',
-          images: activeUser.images || [activeUser.image || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800'],
-          interests: activeUser.interests || ['Travel', 'Music', 'Coffee', 'Photography'],
-        }}
-        onClose={() => setShowProfileModal(false)}
+        profile={activeUser}
         isMatch={true}
+        onClose={() => setShowProfileModal(false)}
+        onLike={() => {
+          setShowProfileModal(false);
+        }}
+        onPass={() => {
+          setShowProfileModal(false);
+          setShowBlockModal(true);
+        }}
       />
 
       {/* Custom Block Confirmation Modal */}
