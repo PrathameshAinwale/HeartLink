@@ -231,7 +231,20 @@ export default function DiscoverScreen() {
     }, [])
   );
 
+  const handlePhotoTapLeft = () => {
+    if (isAnimating) return;
+    setPhotoIdx(prev => Math.max(0, prev - 1));
+  };
+
+  const handlePhotoTapRight = () => {
+    if (isAnimating) return;
+    if (currentProfile?.images?.length) {
+      setPhotoIdx(prev => (prev + 1) % currentProfile.images.length);
+    }
+  };
+
   const openDetail = () => {
+    if (isAnimating) return;
     setShowDetail(true);
     sheetDragY.setValue(0);
     Animated.spring(sheetY, { toValue: 0, tension: 35, friction: 8, useNativeDriver: false }).start();
@@ -453,14 +466,6 @@ export default function DiscoverScreen() {
   // Tap zones on the active card: left third = previous photo, right third = next photo,
   // center = open detail sheet. No drag/swipe gesture handling — the card never
   // follows the finger, only the action buttons below trigger like/pass.
-  const handlePhotoTapLeft = () => {
-    if (isAnimating) return;
-    setPhotoIdx(p => Math.max(0, p - 1));
-  };
-  const handlePhotoTapRight = () => {
-    if (isAnimating) return;
-    setPhotoIdx(p => Math.min(currentProfile.images.length - 1, p + 1));
-  };
 
   return (
     <LinearGradient colors={theme.bgGrad} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={styles.root}>

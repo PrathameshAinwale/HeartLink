@@ -12,7 +12,7 @@ import { useTheme } from '../theme/ThemeContext';
 import ProfileDetail from '../components/discovery/ProfileDetail';
 import CustomAlertModal from '../components/CustomAlertModal';
 import { apiGetRequests, apiAcceptRequest, apiDeclineRequest } from '../services/api';
-import { ensureArray } from '../utils/helpers';
+import { ensureArray, formatImageUrl } from '../utils/helpers';
 
 const { width, height } = Dimensions.get('window');
 
@@ -30,19 +30,26 @@ export default function RequestsScreen() {
     try {
       const res = await apiGetRequests();
       if (res?.requests && Array.isArray(res.requests)) {
-        const apiList = res.requests.map(u => ({
-          id: u.id,
-          name: u.name,
-          age: u.age || 24,
-          job: u.job || 'Member',
-          image: u.avatar || (u.photos && u.photos[0]?.photo_url) || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600',
-          images: ensureArray(u.photos?.map(p => (typeof p === 'string' ? p : p.photo_url || p.uri)).filter(Boolean), [u.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600']),
-          interests: ensureArray(u.interests, ['Travel', 'Music', 'Photography']),
-          likedAt: 'Recently',
-          bio: u.bio || 'Interested in connecting with you!',
-          compatibility: u.compatibility_score || 92,
-          mutuals: [],
-        }));
+        const apiList = res.requests.map(u => {
+          const rawAvatar = u.avatar || (u.photos && u.photos[0]?.photo_url) || '';
+          const rawPhotos = ensureArray(u.photos?.map(p => (typeof p === 'string' ? p : p.photo_url || p.uri)).filter(Boolean));
+          if (u.avatar && !rawPhotos.includes(u.avatar)) rawPhotos.unshift(u.avatar);
+          const formattedPhotos = rawPhotos.map(p => formatImageUrl(p)).filter(Boolean);
+
+          return {
+            id: u.id,
+            name: u.name,
+            age: u.age || 24,
+            job: u.job || 'Member',
+            image: formatImageUrl(rawAvatar),
+            images: formattedPhotos.length > 0 ? formattedPhotos : ['https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600'],
+            interests: ensureArray(u.interests, ['Travel', 'Music', 'Photography']),
+            likedAt: 'Recently',
+            bio: u.bio || 'Interested in connecting with you!',
+            compatibility: u.compatibility_score || 92,
+            mutuals: [],
+          };
+        });
         setRequests(apiList);
       }
     } catch (e) {

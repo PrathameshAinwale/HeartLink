@@ -103,8 +103,18 @@ class DiscoverController extends Controller
         $isMatch = false;
         $matchRecord = null;
 
-        // Check if mutual like or super_like exists
+        // Check if mutual like or super_like exists and send notification
         if (in_array($type, ['like', 'super_like'])) {
+            $userObj = $request->user();
+            \App\Models\Notification::firstOrCreate([
+                'user_id'      => $targetId,
+                'from_user_id' => $swiperId,
+                'type'         => 'like',
+            ], [
+                'message'      => "{$userObj->name} liked your profile!",
+                'is_read'      => false,
+            ]);
+
             $reciprocalSwipe = Swipe::where('swiper_id', $targetId)
                 ->where('swiped_user_id', $swiperId)
                 ->whereIn('type', ['like', 'super_like'])
