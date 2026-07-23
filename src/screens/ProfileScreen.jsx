@@ -14,6 +14,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { updateUserProfile } from '../services/userService';
 import { apiUploadImage } from '../services/api';
 import { ensureArray } from '../utils/helpers';
+import { ALL_VIBE_NODES, getVibeByName } from '../utils/vibeData';
 
 import CustomAlertModal from '../components/CustomAlertModal';
 
@@ -96,6 +97,7 @@ export default function ProfileScreen() {
       drinking: u.drinking || 'Socially',
       clubbing: u.clubbing || 'Never',
       videoIntroUrl: u.video_intro_url || '',
+      vibe: u.vibe || 'Late Night Beats',
       interests: ensureArray(u.interests || u.hobbies, ['Design', 'Photography', 'Travel', 'Coffee', 'Music']),
     };
   }, [user]);
@@ -141,6 +143,7 @@ export default function ProfileScreen() {
   const [editSmoking, setEditSmoking] = useState('');
   const [editDrinking, setEditDrinking] = useState('');
   const [editClubbing, setEditClubbing] = useState('');
+  const [editVibe, setEditVibe] = useState('');
   const [editTagInput, setEditTagInput] = useState('');
   const [editInterests, setEditInterests] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -263,6 +266,7 @@ export default function ProfileScreen() {
     setEditSmoking(profileUser.smoking);
     setEditDrinking(profileUser.drinking);
     setEditClubbing(profileUser.clubbing);
+    setEditVibe(profileUser.vibe);
     setEditInterests([...ensureArray(profileUser.interests)]);
     setIsEditing(true);
   };
@@ -305,6 +309,7 @@ export default function ProfileScreen() {
       smoking: editSmoking,
       drinking: editDrinking,
       clubbing: editClubbing,
+      vibe: editVibe,
       interests: editInterests,
     };
 
@@ -422,6 +427,32 @@ export default function ProfileScreen() {
               </LinearGradient>
             </TouchableOpacity>
           </View>
+
+          {/* Your Vibe Section */}
+          {(() => {
+            const currentVibeObj = getVibeByName(profileUser.vibe);
+            return (
+              <View style={styles.sectionBox}>
+                <BlurView intensity={isDark ? 40 : 70} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
+                <View style={styles.sectionHeaderRow}>
+                  <Ionicons name="sparkles" size={16} color="#FF007F" style={{ marginRight: 6 }} />
+                  <Text style={styles.sectionLabel}>Your Primary Vibe</Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                  <LinearGradient colors={currentVibeObj.color} style={{ width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
+                    <Ionicons name={currentVibeObj.icon} size={20} color="#FFF" />
+                  </LinearGradient>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 15, fontWeight: '800', color: theme.textPrimary }}>{currentVibeObj.name}</Text>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: theme.textSec, marginTop: 1 }}>{currentVibeObj.tagline}</Text>
+                  </View>
+                  <View style={{ backgroundColor: 'rgba(255, 0, 127, 0.12)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255, 0, 127, 0.25)' }}>
+                    <Text style={{ fontSize: 10.5, fontWeight: '800', color: '#FF007F' }}>ACTIVE VIBE</Text>
+                  </View>
+                </View>
+              </View>
+            );
+          })()}
 
           {/* About Me Section */}
           <View style={styles.sectionBox}>
@@ -675,6 +706,21 @@ export default function ProfileScreen() {
                     placeholderTextColor={theme.textFaint}
                   />
                 </View>
+              </View>
+
+              {/* Select Your Primary Vibe */}
+              <Text style={styles.inputLabel}>Select Your Primary Vibe</Text>
+              <View style={styles.relChipRow}>
+                {ALL_VIBE_NODES.map(v => (
+                  <TouchableOpacity
+                    key={v.id}
+                    style={[styles.relChip, editVibe === v.name && styles.relChipActive]}
+                    onPress={() => setEditVibe(v.name)}
+                  >
+                    <Ionicons name={v.icon} size={12} color={editVibe === v.name ? '#FFF' : theme.textSec} style={{ marginRight: 4 }} />
+                    <Text style={[styles.relChipText, editVibe === v.name && styles.relChipTextActive]}>{v.name}</Text>
+                  </TouchableOpacity>
+                ))}
               </View>
 
               {/* Relationship Goal */}

@@ -26,6 +26,7 @@ import {
   EDUCATION_LEVELS, DIET_OPTIONS, SMOKING_OPTIONS,
   DRINKING_OPTIONS, CLUBBING_OPTIONS
 } from '../utils/locationData';
+import { ALL_VIBE_NODES } from '../utils/vibeData';
 
 const { width, height } = Dimensions.get('window');
 const TOTAL_STEPS = 10;
@@ -587,6 +588,39 @@ function StepLifestyleHabits({ data, onChange }) {
         onSelect={(val) => onChange('diet', val)}
       />
 
+      {/* Select Your Primary Vibe Grid */}
+      <Text style={[sty.label, { marginTop: 14, marginBottom: 8 }]}>Select Your Primary Vibe</Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
+        {ALL_VIBE_NODES.map((v) => {
+          const isSelected = (data.vibe || 'Late Night Beats') === v.name;
+          return (
+            <TouchableOpacity
+              key={v.id}
+              style={{
+                width: '48%',
+                padding: 10,
+                borderRadius: 14,
+                borderWidth: 1.5,
+                borderColor: isSelected ? '#FF007F' : THEME.border,
+                backgroundColor: isSelected ? 'rgba(255, 0, 127, 0.08)' : '#FFFFFF',
+              }}
+              onPress={() => onChange('vibe', v.name)}
+              activeOpacity={0.8}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <LinearGradient colors={v.color} style={{ width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginRight: 6 }}>
+                  <Ionicons name={v.icon} size={14} color="#FFF" />
+                </LinearGradient>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 11.5, fontWeight: '800', color: THEME.textPrimary }} numberOfLines={1}>{v.name}</Text>
+                  <Text style={{ fontSize: 9.5, color: THEME.textFaint }} numberOfLines={1}>{v.tagline}</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
       <View style={sty.lifestyleNoteCard}>
         <Ionicons name="sparkles" size={16} color="#FF007F" style={{ marginRight: 6 }} />
         <Text style={sty.lifestyleNoteText}>
@@ -809,7 +843,7 @@ export default function RegisterScreen() {
     country: 'India', state: '', city: '', pincode: '',
     motherTongue: 'Hindi', languagesSpoken: ['Hindi', 'English'], religion: 'Hinduism',
     education: "Bachelor's Degree", occupation: 'Professional', diet: 'Vegetarian',
-    smoking: 'Never', drinking: 'Socially', clubbing: 'Never',
+    smoking: 'Never', drinking: 'Socially', clubbing: 'Never', vibe: 'Late Night Beats',
     ageMin: 18, ageMax: 35, videoIntroUrl: '',
     images: [], facePhotos: {},
   });
@@ -926,6 +960,7 @@ export default function RegisterScreen() {
             smoking: data.smoking || 'Never',
             drinking: data.drinking || 'Socially',
             clubbing: data.clubbing || 'Never',
+            vibe: data.vibe || 'Late Night Beats',
             avatar: avatarUrl,
             video_intro_url: data.videoIntroUrl || '',
             city: data.city || 'Mumbai',

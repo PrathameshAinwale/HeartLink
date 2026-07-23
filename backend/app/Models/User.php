@@ -21,6 +21,7 @@ class User extends Authenticatable
         'dob',
         'gender',
         'bio',
+        'vibe',
         'job',
         'avatar',
         'video_intro_url',

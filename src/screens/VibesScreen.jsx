@@ -79,6 +79,7 @@ export default function VibesScreen() {
               age: u.age || 24,
               match: u.compatibility_score || 85,
               bio: u.bio || '',
+              vibe: u.vibe || '',
               image: formatImageUrl(img),
               interests: ensureArray(u.interests),
             };
@@ -178,15 +179,18 @@ export default function VibesScreen() {
     return ALL_VIBE_NODES.find(v => v.id === selectedVibe);
   }, [selectedVibe]);
 
-  // Map real users to selected vibe by interest keyword overlap
+  // Map real users to selected vibe by direct vibe matching OR interest keyword overlap
   const matches = useMemo(() => {
     const keywords = VIBE_KEYWORDS[selectedVibe] || [];
-    return realPeople.filter(person =>
-      person.interests.some(interest =>
+    const vibeName = activeVibe ? activeVibe.name.toLowerCase() : '';
+    return realPeople.filter(person => {
+      const pVibe = (person.vibe || '').toLowerCase();
+      if (pVibe && pVibe === vibeName) return true;
+      return person.interests.some(interest =>
         keywords.some(kw => interest.toLowerCase().includes(kw))
-      )
-    );
-  }, [selectedVibe, realPeople]);
+      );
+    });
+  }, [selectedVibe, activeVibe, realPeople]);
 
   const glowColors = useMemo(() => {
     return activeVibe ? activeVibe.color : ['#A855F7', '#6366F1'];

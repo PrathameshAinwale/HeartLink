@@ -158,6 +158,7 @@ class AuthController extends Controller
             'pincode'           => 'sometimes|nullable|string',
             'video_intro_url'   => 'sometimes|nullable|string',
             'bio'               => 'sometimes|nullable|string',
+            'vibe'              => 'sometimes|nullable|string',
             'job'               => 'sometimes|nullable|string',
             'avatar'            => 'sometimes|nullable|string',
             'city'              => 'sometimes|nullable|string',
