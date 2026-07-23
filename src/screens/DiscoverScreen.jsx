@@ -780,7 +780,9 @@ export default function DiscoverScreen() {
                         <Ionicons name="checkmark-circle" size={19} color="#3897F0" style={{ marginLeft: 6, marginTop: 2 }} />
                       )}
                     </View>
-                    <Text style={styles.cardProfileJob}>{currentProfile.job}</Text>
+                    <Text style={styles.cardProfileJob}>
+                      {currentProfile.job}{currentProfile.distance ? ` · 📍 ${currentProfile.distance}` : ''}
+                    </Text>
                   </TouchableOpacity>
                 </Animated.View>
 

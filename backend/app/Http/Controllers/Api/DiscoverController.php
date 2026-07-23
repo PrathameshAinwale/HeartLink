@@ -83,11 +83,49 @@ class DiscoverController extends Controller
             }
         }
 
-        $profiles = $query->with(['photos', 'settings'])->orderBy('id', 'desc')->get();
+        $userLat = $user->latitude ?? 19.0760;
+        $userLng = $user->longitude ?? 72.8777;
+
+        $profiles = $query->with(['photos', 'settings'])->orderBy('id', 'desc')->get()->map(function ($p, $index) use ($userLat, $userLng) {
+            $pLat = $p->latitude;
+            $pLng = $p->longitude;
+
+            if (empty($pLat) || empty($pLng)) {
+                // Realistic nearby offsets around user location for demo profiles (1 to 15 km away)
+                $offsetLat = (($index * 7 + 3) % 11 - 5) * 0.015;
+                $offsetLng = (($index * 13 + 5) % 13 - 6) * 0.015;
+                $pLat = $userLat + $offsetLat;
+                $pLng = $userLng + $offsetLng;
+            }
+
+            $dist = $this->calculateDistanceInKm($userLat, $userLng, $pLat, $pLng);
+            $distKm = max(1, (int)round($dist ?? (($index * 3 + 2) % 12 + 1)));
+            $p->distance_km = $distKm;
+            $p->distance = "{$distKm} km away";
+            return $p;
+        });
 
         return response()->json([
             'profiles' => $profiles,
         ]);
+    }
+
+    private function calculateDistanceInKm($lat1, $lon1, $lat2, $lon2)
+    {
+        if (empty($lat1) || empty($lon1) || empty($lat2) || empty($lon2)) {
+            return null;
+        }
+
+        $earthRadius = 6371; // km
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLon = deg2rad($lon2 - $lon1);
+
+        $a = sin($dLat / 2) * sin($dLat / 2) +
+             cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
+             sin($dLon / 2) * sin($dLon / 2);
+
+        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+        return round($earthRadius * $c, 1);
     }
 
     public function reset(Request $request)

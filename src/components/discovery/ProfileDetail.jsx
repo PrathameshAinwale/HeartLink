@@ -168,7 +168,7 @@ export default function ProfileDetail({ visible, profile, onClose, onLike, onPas
                 </View>
                 <View style={styles.quickFact}>
                   <Ionicons name="navigate-outline" size={14} color="#8A66FF" />
-                  <Text style={styles.quickFactTxt}>{profile.distance || '5 km'}</Text>
+                  <Text style={styles.quickFactTxt}>{profile.distance || (profile.distance_km ? `${profile.distance_km} km away` : '3 km away')}</Text>
                 </View>
                 <View style={styles.quickFact}>
                   <Ionicons name={profile.gender?.toLowerCase().includes('female') ? 'woman-outline' : 'man-outline'} size={14} color="#4A89FF" />
