@@ -140,6 +140,7 @@ class AuthController extends Controller
 
         $validated = $request->validate([
             'name'              => 'sometimes|string|max:255',
+            'age'               => 'sometimes|nullable|integer',
             'display_name'      => 'sometimes|nullable|string',
             'country_code'      => 'sometimes|nullable|string',
             'mother_tongue'     => 'sometimes|nullable|string',

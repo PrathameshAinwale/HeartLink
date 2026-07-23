@@ -62,7 +62,7 @@ function CustomTabBar({ state, descriptors, navigation }) {
 
   useEffect(() => {
     fetchBadgeCounts();
-    const interval = setInterval(fetchBadgeCounts, 12000); // Relaxed 12s interval
+    const interval = setInterval(fetchBadgeCounts, 2500); // 2.5s polling for snappy badge updates
     return () => clearInterval(interval);
   }, [state.index]);
 

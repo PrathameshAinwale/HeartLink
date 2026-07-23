@@ -23,7 +23,11 @@ export default function ChatScreen() {
   const { theme, isDark } = useTheme();
   const styles = useMemo(() => getStyles(theme), [theme]);
 
+  const isFetchingRef = React.useRef(false);
+
   const fetchConversations = async () => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     try {
       const res = await apiGetConversations();
       if (res?.conversations && Array.isArray(res.conversations)) {
@@ -45,12 +49,14 @@ export default function ChatScreen() {
       }
     } catch (e) {
       console.warn('Fetch conversations error:', e?.message);
+    } finally {
+      isFetchingRef.current = false;
     }
   };
 
   useEffect(() => {
     fetchConversations();
-    const interval = setInterval(fetchConversations, 6000); // 6s polling only when screen is active
+    const interval = setInterval(fetchConversations, 2000); // Fast 2s polling
     const unsubscribe = navigation.addListener('focus', () => {
       fetchConversations();
     });

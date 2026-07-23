@@ -8,6 +8,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import AppNavigator from './src/navigation/AppNavigator';
 import { AuthProvider } from './src/hooks/useAuth';
 import { ThemeProvider } from './src/theme/ThemeContext';
+import { NotificationProvider } from './src/context/NotificationContext';
 
 export default function App() {
   return (
@@ -15,7 +16,9 @@ export default function App() {
       <SafeAreaProvider>
         <AuthProvider>
           <ThemeProvider>
-            <AppNavigator />
+            <NotificationProvider>
+              <AppNavigator />
+            </NotificationProvider>
           </ThemeProvider>
         </AuthProvider>
       </SafeAreaProvider>

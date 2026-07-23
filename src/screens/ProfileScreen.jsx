@@ -32,6 +32,12 @@ const RELATIONSHIP_OPTIONS = [
   'Friendship',
 ];
 
+const MARITAL_OPTIONS = ['Never Married', 'Divorced', 'Widowed', 'Separated'];
+const RELIGION_OPTIONS = ['Hinduism', 'Islam', 'Christianity', 'Sikhism', 'Buddhism', 'Jainism', 'Other'];
+const EDUCATION_OPTIONS = ["Bachelor's Degree", "Master's Degree", "High School", "Doctorate / PhD", "Other"];
+const DIET_OPTIONS = ['Vegetarian', 'Non-Vegetarian', 'Vegan', 'Eggetarian'];
+const HABIT_OPTIONS = ['Never', 'Socially', 'Frequently'];
+
 export default function ProfileScreen() {
   const navigation = useNavigation();
   const { user, logout, updateUser } = useAuth();
@@ -121,11 +127,20 @@ export default function ProfileScreen() {
   // State for Edit Modal
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState('');
+  const [editAge, setEditAge] = useState('');
   const [editJob, setEditJob] = useState('');
   const [editCity, setEditCity] = useState('');
   const [editState, setEditState] = useState('');
   const [editBio, setEditBio] = useState('');
   const [editRelType, setEditRelType] = useState('');
+  const [editMaritalStatus, setEditMaritalStatus] = useState('');
+  const [editMotherTongue, setEditMotherTongue] = useState('');
+  const [editReligion, setEditReligion] = useState('');
+  const [editEducation, setEditEducation] = useState('');
+  const [editDiet, setEditDiet] = useState('');
+  const [editSmoking, setEditSmoking] = useState('');
+  const [editDrinking, setEditDrinking] = useState('');
+  const [editClubbing, setEditClubbing] = useState('');
   const [editTagInput, setEditTagInput] = useState('');
   const [editInterests, setEditInterests] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -234,11 +249,20 @@ export default function ProfileScreen() {
 
   const handleOpenEdit = () => {
     setEditName(profileUser.name);
+    setEditAge(profileUser.age ? profileUser.age.toString() : '25');
     setEditJob(profileUser.job);
     setEditCity(profileUser.city);
     setEditState(profileUser.state);
     setEditBio(profileUser.bio);
     setEditRelType(profileUser.relationshipType);
+    setEditMaritalStatus(profileUser.maritalStatus);
+    setEditMotherTongue(profileUser.motherTongue);
+    setEditReligion(profileUser.religion);
+    setEditEducation(profileUser.education);
+    setEditDiet(profileUser.diet);
+    setEditSmoking(profileUser.smoking);
+    setEditDrinking(profileUser.drinking);
+    setEditClubbing(profileUser.clubbing);
     setEditInterests([...ensureArray(profileUser.interests)]);
     setIsEditing(true);
   };
@@ -266,11 +290,21 @@ export default function ProfileScreen() {
     setSaving(true);
     const updatedPayload = {
       name: editName.trim(),
+      age: parseInt(editAge, 10) || 25,
       job: editJob.trim(),
+      occupation: editJob.trim(),
       city: editCity.trim(),
       state: editState.trim(),
       bio: editBio.trim(),
       relationship_type: editRelType,
+      marital_status: editMaritalStatus,
+      mother_tongue: editMotherTongue.trim(),
+      religion: editReligion,
+      education: editEducation,
+      diet: editDiet,
+      smoking: editSmoking,
+      drinking: editDrinking,
+      clubbing: editClubbing,
       interests: editInterests,
     };
 
@@ -584,23 +618,38 @@ export default function ProfileScreen() {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalScroll}>
-              {/* Name */}
-              <Text style={styles.inputLabel}>Full Name</Text>
-              <TextInput
-                style={styles.modalInput}
-                value={editName}
-                onChangeText={setEditName}
-                placeholder="Full Name"
-                placeholderTextColor={theme.textFaint}
-              />
+              {/* Name & Age Row */}
+              <View style={styles.rowTwo}>
+                <View style={{ flex: 2 }}>
+                  <Text style={styles.inputLabel}>Full Name</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    value={editName}
+                    onChangeText={setEditName}
+                    placeholder="Full Name"
+                    placeholderTextColor={theme.textFaint}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.inputLabel}>Age</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    value={editAge}
+                    onChangeText={setEditAge}
+                    placeholder="Age"
+                    keyboardType="number-pad"
+                    placeholderTextColor={theme.textFaint}
+                  />
+                </View>
+              </View>
 
-              {/* Job */}
+              {/* Job / Profession */}
               <Text style={styles.inputLabel}>Job / Profession</Text>
               <TextInput
                 style={styles.modalInput}
                 value={editJob}
                 onChangeText={setEditJob}
-                placeholder="Job Title"
+                placeholder="Job Title / Occupation"
                 placeholderTextColor={theme.textFaint}
               />
 
@@ -638,6 +687,112 @@ export default function ProfileScreen() {
                     onPress={() => setEditRelType(opt)}
                   >
                     <Text style={[styles.relChipText, editRelType === opt && styles.relChipTextActive]}>{opt}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Marital Status */}
+              <Text style={styles.inputLabel}>Marital Status</Text>
+              <View style={styles.relChipRow}>
+                {MARITAL_OPTIONS.map(opt => (
+                  <TouchableOpacity
+                    key={opt}
+                    style={[styles.relChip, editMaritalStatus === opt && styles.relChipActive]}
+                    onPress={() => setEditMaritalStatus(opt)}
+                  >
+                    <Text style={[styles.relChipText, editMaritalStatus === opt && styles.relChipTextActive]}>{opt}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Mother Tongue */}
+              <Text style={styles.inputLabel}>Mother Tongue</Text>
+              <TextInput
+                style={styles.modalInput}
+                value={editMotherTongue}
+                onChangeText={setEditMotherTongue}
+                placeholder="e.g. Hindi, English, Marathi"
+                placeholderTextColor={theme.textFaint}
+              />
+
+              {/* Religion */}
+              <Text style={styles.inputLabel}>Religion & Faith</Text>
+              <View style={styles.relChipRow}>
+                {RELIGION_OPTIONS.map(opt => (
+                  <TouchableOpacity
+                    key={opt}
+                    style={[styles.relChip, editReligion === opt && styles.relChipActive]}
+                    onPress={() => setEditReligion(opt)}
+                  >
+                    <Text style={[styles.relChipText, editReligion === opt && styles.relChipTextActive]}>{opt}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Education Level */}
+              <Text style={styles.inputLabel}>Education Level</Text>
+              <View style={styles.relChipRow}>
+                {EDUCATION_OPTIONS.map(opt => (
+                  <TouchableOpacity
+                    key={opt}
+                    style={[styles.relChip, editEducation === opt && styles.relChipActive]}
+                    onPress={() => setEditEducation(opt)}
+                  >
+                    <Text style={[styles.relChipText, editEducation === opt && styles.relChipTextActive]}>{opt}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Diet */}
+              <Text style={styles.inputLabel}>Diet Preference</Text>
+              <View style={styles.relChipRow}>
+                {DIET_OPTIONS.map(opt => (
+                  <TouchableOpacity
+                    key={opt}
+                    style={[styles.relChip, editDiet === opt && styles.relChipActive]}
+                    onPress={() => setEditDiet(opt)}
+                  >
+                    <Text style={[styles.relChipText, editDiet === opt && styles.relChipTextActive]}>{opt}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Habits: Smoking, Drinking, Clubbing */}
+              <Text style={styles.inputLabel}>Smoking Habit</Text>
+              <View style={styles.relChipRow}>
+                {HABIT_OPTIONS.map(opt => (
+                  <TouchableOpacity
+                    key={opt}
+                    style={[styles.relChip, editSmoking === opt && styles.relChipActive]}
+                    onPress={() => setEditSmoking(opt)}
+                  >
+                    <Text style={[styles.relChipText, editSmoking === opt && styles.relChipTextActive]}>{opt}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.inputLabel}>Drinking Habit</Text>
+              <View style={styles.relChipRow}>
+                {HABIT_OPTIONS.map(opt => (
+                  <TouchableOpacity
+                    key={opt}
+                    style={[styles.relChip, editDrinking === opt && styles.relChipActive]}
+                    onPress={() => setEditDrinking(opt)}
+                  >
+                    <Text style={[styles.relChipText, editDrinking === opt && styles.relChipTextActive]}>{opt}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.inputLabel}>Clubbing Habit</Text>
+              <View style={styles.relChipRow}>
+                {HABIT_OPTIONS.map(opt => (
+                  <TouchableOpacity
+                    key={opt}
+                    style={[styles.relChip, editClubbing === opt && styles.relChipActive]}
+                    onPress={() => setEditClubbing(opt)}
+                  >
+                    <Text style={[styles.relChipText, editClubbing === opt && styles.relChipTextActive]}>{opt}</Text>
                   </TouchableOpacity>
                 ))}
               </View>

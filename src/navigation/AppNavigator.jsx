@@ -4,22 +4,25 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
 import MainTabNavigator from './MainTabNavigator';
-import AuthNavigator    from './AuthNavigator';
+import AuthNavigator from './AuthNavigator';
 import ChatDetailScreen from '../screens/ChatDetailScreen';
-import ProfileScreen    from '../screens/ProfileScreen';
-import RequestsScreen   from '../screens/RequestsScreen';
+import ProfileScreen from '../screens/ProfileScreen';
+import RequestsScreen from '../screens/RequestsScreen';
 import RestaurantDetailScreen from '../screens/RestaurantDetailScreen';
 import PlansScreen from '../screens/PlansScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import { ActivityIndicator, View } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../theme/ThemeContext';
+import { useNotification } from '../context/NotificationContext';
+import InAppNotificationBanner from '../components/InAppNotificationBanner';
 
 const Stack = createStackNavigator();
 
 export default function AppNavigator() {
   const { isAuthenticated, isLoading } = useAuth();
   const { isDark, theme } = useTheme();
+  const { bannerVisible, bannerData, dismissNotification } = useNotification();
 
   if (isLoading) {
     return (
@@ -33,6 +36,11 @@ export default function AppNavigator() {
     <>
       <StatusBar style={isDark ? 'light' : 'dark'} translucent backgroundColor="transparent" />
       <NavigationContainer>
+        <InAppNotificationBanner
+          visible={bannerVisible}
+          data={bannerData}
+          onDismiss={dismissNotification}
+        />
         <Stack.Navigator
           screenOptions={{
             headerShown: false,
