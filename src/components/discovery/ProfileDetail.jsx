@@ -154,8 +154,8 @@ export default function ProfileDetail({ visible, profile, onClose, onLike, onPas
               )}
               {/* Name overlay */}
               <View style={styles.sheetHeroNameWrap}>
-                <Text style={styles.sheetHeroName}>{profile.name}, {profile.age}</Text>
-                <Text style={styles.sheetHeroSub}>{profile.job || 'Connections'}</Text>
+                <Text style={styles.sheetHeroName}>{profile.name}{profile.showAge !== false ? `, ${profile.age}` : ''}</Text>
+                <Text style={styles.sheetHeroSub}>{profile.showOccupation !== false ? (profile.job || 'Connections') : 'Member'}</Text>
               </View>
             </View>
 
@@ -186,10 +186,12 @@ export default function ProfileDetail({ visible, profile, onClose, onLike, onPas
               <View style={styles.sheetCard}>
                 <Text style={styles.sheetCardLabel}>PERSONAL DETAILS</Text>
                 <View style={styles.tagsRow}>
-                  <View style={styles.tag}>
-                    <Ionicons name="school-outline" size={13} color="#FF007F" style={{ marginRight: 4 }} />
-                    <Text style={styles.tagText}>Education: {profile.education || 'Bachelor’s Degree'}</Text>
-                  </View>
+                  {(!profile.hideEducation && !profile.user?.settings?.hide_education) && (
+                    <View style={styles.tag}>
+                      <Ionicons name="school-outline" size={13} color="#FF007F" style={{ marginRight: 4 }} />
+                      <Text style={styles.tagText}>Education: {profile.education || 'Bachelor’s Degree'}</Text>
+                    </View>
+                  )}
                   <View style={styles.tag}>
                     <Ionicons name="sparkles-outline" size={13} color="#FF007F" style={{ marginRight: 4 }} />
                     <Text style={styles.tagText}>Religion: {profile.religion || 'Spiritual'}</Text>

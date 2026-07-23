@@ -46,6 +46,8 @@ class User extends Authenticatable
         'latitude',
         'longitude',
         'is_online',
+        'is_verified',
+        'subscription_plan',
         'compatibility_score',
         'interests',
     ];
@@ -59,10 +61,11 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
-            'password' => 'hashed',
-            'is_online' => 'boolean',
-            'interests' => 'array',
-            'languages_spoken' => 'array',
+            'password'          => 'hashed',
+            'is_online'         => 'boolean',
+            'is_verified'       => 'boolean',
+            'interests'         => 'array',
+            'languages_spoken'   => 'array',
         ];
     }
 
@@ -95,5 +98,10 @@ class User extends Authenticatable
     public function activeSubscription()
     {
         return $this->hasOne(UserSubscription::class)->where('status', 'active')->latestOfMany();
+    }
+
+    public function settings()
+    {
+        return $this->hasOne(UserSettings::class);
     }
 }

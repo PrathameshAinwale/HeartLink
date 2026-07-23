@@ -369,7 +369,9 @@ export default function ProfileScreen() {
           {/* Header Info & Edit Profile Button */}
           <View style={styles.topInfoRow}>
             <View style={styles.nameContainer}>
-              <Text style={styles.profileName}>{profileUser.name}, {profileUser.age}</Text>
+              <Text style={styles.profileName}>
+                {profileUser.name}{(user?.settings && (user.settings.show_age === false || user.settings.show_age === 0 || user.settings.show_age === '0' || user.settings.show_age === 'false')) ? '' : `, ${profileUser.age}`}
+              </Text>
               <View style={styles.subInfoRow}>
                 <Ionicons name="briefcase-outline" size={14} color={theme.textSec} style={{ marginRight: 4 }} />
                 <Text style={styles.profileSubtext}>{profileUser.job}</Text>

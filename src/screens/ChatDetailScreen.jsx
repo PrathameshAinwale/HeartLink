@@ -79,33 +79,8 @@ const EMOJI_CATEGORIES = [
   },
 ];
 
-// Sample messages for fallback
-const SAMPLE_MESSAGES = [
-  {
-    id: '1',
-    text: 'Hey there! How are you doing?',
-    sender: 'other',
-    time: '10:30 AM',
-  },
-  {
-    id: '2',
-    text: "I'm doing great! Thanks for asking 😊",
-    sender: 'me',
-    time: '10:32 AM',
-  },
-  {
-    id: '3',
-    text: 'I really like your profile picture!',
-    sender: 'other',
-    time: '10:33 AM',
-  },
-  {
-    id: '4',
-    text: "Thank you! That's very kind of you to say.",
-    sender: 'me',
-    time: '10:35 AM',
-  },
-];
+// Sample messages array set to empty — keep chat thread blank when empty
+const SAMPLE_MESSAGES = [];
 
 // How close to the bottom (in px) counts as "already at the bottom"
 const NEAR_BOTTOM_THRESHOLD = 120;
@@ -338,8 +313,8 @@ export default function ChatDetailScreen() {
     setShowJumpToBottom((prev) => (prev === !nearBottom ? prev : !nearBottom));
   }, []);
 
-  const handleContentSizeChange = useCallback(() => {
-    if (isNearBottomRef.current) {
+  const handleContentSizeChange = useCallback((w, h) => {
+    if (isNearBottomRef.current && h > listLayoutHeightRef.current) {
       scrollToBottom(true);
     }
   }, [scrollToBottom]);
@@ -498,10 +473,7 @@ export default function ChatDetailScreen() {
           );
 
           // Only scroll if it's the first load OR we're near bottom AND there's a new message
-          if (isFirst) {
-            setTimeout(() => scrollToBottom(false), 250);
-          } else if (hasNewMessage && isNearBottomRef.current) {
-            // Use requestAnimationFrame for smoother scroll after state update
+          if (!isFirst && hasNewMessage && isNearBottomRef.current) {
             requestAnimationFrame(() => {
               scrollToBottom(true);
             });
@@ -526,7 +498,6 @@ export default function ChatDetailScreen() {
       } finally {
         if (isFirst) {
           setIsLoading(false);
-          setTimeout(() => scrollToBottom(false), 250);
         }
       }
     },
@@ -883,14 +854,13 @@ export default function ChatDetailScreen() {
             keyExtractor={keyExtractor}
             contentContainerStyle={[
               styles.msgList,
-              { flexGrow: 1, justifyContent: 'flex-end' },
+              { flexGrow: 1, justifyContent: 'flex-start' },
             ]}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             onScroll={handleScroll}
             scrollEventThrottle={16}
             onContentSizeChange={handleContentSizeChange}
-            onLayout={() => scrollToBottom(false)}
             // Perf: keeps scrolling smooth as the thread grows, and avoids
             // re-mounting/blanking rows mid-scroll on iOS.
             initialNumToRender={16}

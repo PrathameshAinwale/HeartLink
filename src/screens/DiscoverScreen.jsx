@@ -182,15 +182,31 @@ export default function DiscoverScreen() {
     const matchRes = calculateMatchPercentage(user, u);
     const dynamicScore = u.compatibility_score || matchRes.percentage;
 
+    const targetSettings = u.settings || (u.id === user?.id ? user?.settings : null);
+    const isFalseVal = (v) => v === false || v === 0 || v === '0' || v === 'false';
+    const isTrueVal = (v) => v === true || v === 1 || v === '1' || v === 'true';
+
+    const showAgeSetting = targetSettings ? !isFalseVal(targetSettings.show_age) : true;
+    const showOccupationSetting = targetSettings ? !isFalseVal(targetSettings.show_occupation) : true;
+    const showDistanceSetting = targetSettings ? !isFalseVal(targetSettings.show_distance) : true;
+    const hideEducationSetting = targetSettings ? isTrueVal(targetSettings.hide_education) : false;
+
+    const isVerifiedUser = !!(u.is_verified || u.email_verified_at || u.isVerified || (u.id === user?.id && user?.is_verified));
+
     return {
       id: u.id,
       name: u.name || 'Member',
       age: u.age || 25,
+      isVerified: isVerifiedUser,
+      showAge: showAgeSetting,
+      showOccupation: showOccupationSetting,
+      showDistance: showDistanceSetting,
+      hideEducation: hideEducationSetting,
       gender: u.gender || 'Female',
-      job: u.job || 'Member',
+      job: showOccupationSetting ? (u.job || 'Member') : 'Member',
       bio: u.bio || 'Living life and finding meaningful connections on HeartLink.',
       location: cityState,
-      distance: 'Nearby',
+      distance: showDistanceSetting ? 'Nearby' : 'Hidden',
       compatibility: dynamicScore,
       images: userPhotos,
       interests: ensureArray(u.interests, ['Travel', 'Coffee', 'Music']),
@@ -223,7 +239,8 @@ export default function DiscoverScreen() {
       }
 
       if (rRes?.requests && Array.isArray(rRes.requests)) {
-        setRequestCount(rRes.requests.length);
+        const pending = rRes.requests.filter(r => (r.request_status || r.status || 'pending') === 'pending').length;
+        setRequestCount(pending);
       } else {
         setRequestCount(0);
       }
@@ -336,18 +353,35 @@ export default function DiscoverScreen() {
     passFlashOpacity.setValue(0);
   };
 
+  const hasActivePlan = useMemo(() => {
+    if (!user) return false;
+    if (user.subscription_plan && user.subscription_plan.toLowerCase() !== 'free') return true;
+    if (user.activeSubscription?.plan_name) return true;
+    if (user.active_subscription?.plan_name) return true;
+    if (user.plan && user.plan.toLowerCase() !== 'free') return true;
+    return false;
+  }, [user]);
+
+  const handleSparkPress = () => {
+    if (!hasActivePlan) {
+      navigation.navigate('Plans');
+    } else {
+      moveToNext('super_like');
+    }
+  };
+
   // "Like" action — 3-step sequence:
   // 1. Present profile swipes off (background cards hidden so next profile does NOT peek)
   // 2. Message appears and disappears on clean screen
   // 3. Next profile comes smoothly onto user screen
-  const moveToNext = () => {
+  const moveToNext = (swipeType = 'like') => {
     if (isAnimating) return;
     setIsAnimating(true);
     setPhotoIdx(0);
 
     const currentP = currentProfile;
     if (currentP && currentP.id) {
-      apiSwipeUser(currentP.id, 'like').catch(() => { });
+      apiSwipeUser(currentP.id, swipeType).catch(() => { });
     }
 
     setLikeMsgIdx(Math.floor(Math.random() * LIKE_MESSAGES.length));
@@ -390,39 +424,43 @@ export default function DiscoverScreen() {
         ])
       ]).start(() => {
         setDbProfiles(prev => prev.filter(p => p.id !== currentP?.id));
-        card1Pos.setValue({ x: 0, y: 0 });
-        card1Scale.setValue(0.92);
-        card1Opacity.setValue(0);
-        card2Scale.setValue(0.97);
-        card2Opacity.setValue(0);
-        card3Scale.setValue(0.93);
-        card3Opacity.setValue(0);
+        setPhotoIdx(0);
 
-        Animated.parallel([
-          Animated.timing(card1Opacity, {
-            toValue: 1,
-            duration: 320,
-            useNativeDriver: false,
-            easing: Easing.out(Easing.quad),
-          }),
-          Animated.spring(card1Scale, {
-            toValue: 1,
-            friction: 7,
-            tension: 40,
-            useNativeDriver: false,
-          }),
-          Animated.timing(card2Opacity, {
-            toValue: 0.8,
-            duration: 320,
-            useNativeDriver: false,
-          }),
-          Animated.timing(card3Opacity, {
-            toValue: 0.5,
-            duration: 320,
-            useNativeDriver: false,
-          }),
-        ]).start(() => {
-          setIsAnimating(false);
+        requestAnimationFrame(() => {
+          card1Pos.setValue({ x: 0, y: 0 });
+          card1Scale.setValue(0.92);
+          card1Opacity.setValue(0);
+          card2Scale.setValue(0.97);
+          card2Opacity.setValue(0);
+          card3Scale.setValue(0.93);
+          card3Opacity.setValue(0);
+
+          Animated.parallel([
+            Animated.timing(card1Opacity, {
+              toValue: 1,
+              duration: 320,
+              useNativeDriver: false,
+              easing: Easing.out(Easing.quad),
+            }),
+            Animated.spring(card1Scale, {
+              toValue: 1,
+              friction: 7,
+              tension: 40,
+              useNativeDriver: false,
+            }),
+            Animated.timing(card2Opacity, {
+              toValue: 0.8,
+              duration: 320,
+              useNativeDriver: false,
+            }),
+            Animated.timing(card3Opacity, {
+              toValue: 0.5,
+              duration: 320,
+              useNativeDriver: false,
+            }),
+          ]).start(() => {
+            setIsAnimating(false);
+          });
         });
       });
     });
@@ -477,39 +515,43 @@ export default function DiscoverScreen() {
         ])
       ]).start(() => {
         setDbProfiles(prev => prev.filter(p => p.id !== currentP?.id));
-        card1Pos.setValue({ x: 0, y: 0 });
-        card1Scale.setValue(0.92);
-        card1Opacity.setValue(0);
-        card2Scale.setValue(0.97);
-        card2Opacity.setValue(0);
-        card3Scale.setValue(0.93);
-        card3Opacity.setValue(0);
+        setPhotoIdx(0);
 
-        Animated.parallel([
-          Animated.timing(card1Opacity, {
-            toValue: 1,
-            duration: 320,
-            useNativeDriver: false,
-            easing: Easing.out(Easing.quad),
-          }),
-          Animated.spring(card1Scale, {
-            toValue: 1,
-            friction: 7,
-            tension: 40,
-            useNativeDriver: false,
-          }),
-          Animated.timing(card2Opacity, {
-            toValue: 0.8,
-            duration: 320,
-            useNativeDriver: false,
-          }),
-          Animated.timing(card3Opacity, {
-            toValue: 0.5,
-            duration: 320,
-            useNativeDriver: false,
-          }),
-        ]).start(() => {
-          setIsAnimating(false);
+        requestAnimationFrame(() => {
+          card1Pos.setValue({ x: 0, y: 0 });
+          card1Scale.setValue(0.92);
+          card1Opacity.setValue(0);
+          card2Scale.setValue(0.97);
+          card2Opacity.setValue(0);
+          card3Scale.setValue(0.93);
+          card3Opacity.setValue(0);
+
+          Animated.parallel([
+            Animated.timing(card1Opacity, {
+              toValue: 1,
+              duration: 320,
+              useNativeDriver: false,
+              easing: Easing.out(Easing.quad),
+            }),
+            Animated.spring(card1Scale, {
+              toValue: 1,
+              friction: 7,
+              tension: 40,
+              useNativeDriver: false,
+            }),
+            Animated.timing(card2Opacity, {
+              toValue: 0.8,
+              duration: 320,
+              useNativeDriver: false,
+            }),
+            Animated.timing(card3Opacity, {
+              toValue: 0.5,
+              duration: 320,
+              useNativeDriver: false,
+            }),
+          ]).start(() => {
+            setIsAnimating(false);
+          });
         });
       });
     });
@@ -532,9 +574,9 @@ export default function DiscoverScreen() {
           <Text style={styles.headerCenterTitle}>Heart Link</Text>
 
           <View style={styles.headerRightGroup}>
-            <TouchableOpacity style={styles.headerRightBtn} onPress={handleRewindPress} activeOpacity={0.7}>
+            {/* <TouchableOpacity style={styles.headerRightBtn} onPress={handleRewindPress} activeOpacity={0.7}>
               <Ionicons name="reload-outline" size={18} color="#F59E0B" />
-            </TouchableOpacity>
+            </TouchableOpacity> */}
 
             <TouchableOpacity style={styles.headerRightBtn} onPress={() => navigation.navigate('Requests')} activeOpacity={0.7}>
               <Ionicons name="notifications" size={19} color={theme.textPrimary} />
@@ -642,7 +684,7 @@ export default function DiscoverScreen() {
                   <Image source={{ uri: formatImageUrl(nextNextProfile.images?.[0]) }} style={styles.cardPhoto} resizeMode="cover" />
                   <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.75)']} style={styles.bottomGrad} />
                   <View style={styles.cardTextOverlayBottomLeft}>
-                    <Text style={styles.cardProfileName}>{nextNextProfile.name}, {nextNextProfile.age}</Text>
+                    <Text style={styles.cardProfileName}>{nextNextProfile.name}{nextNextProfile.showAge !== false ? `, ${nextNextProfile.age}` : ''}</Text>
                     <Text style={styles.cardProfileJob}>{nextNextProfile.job}</Text>
                   </View>
                 </Animated.View>
@@ -664,7 +706,7 @@ export default function DiscoverScreen() {
                   <Image source={{ uri: formatImageUrl(nextProfile.images?.[0]) }} style={styles.cardPhoto} resizeMode="cover" />
                   <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.75)']} style={styles.bottomGrad} />
                   <View style={styles.cardTextOverlayBottomLeft}>
-                    <Text style={styles.cardProfileName}>{nextProfile.name}, {nextProfile.age}</Text>
+                    <Text style={styles.cardProfileName}>{nextProfile.name}{nextProfile.showAge !== false ? `, ${nextProfile.age}` : ''}</Text>
                     <Text style={styles.cardProfileJob}>{nextProfile.job}</Text>
                   </View>
                   <View style={styles.cardMatchBadge} pointerEvents="none">
@@ -690,8 +732,8 @@ export default function DiscoverScreen() {
                 ]}
               >
                 <Image
-                  key={`${currentProfile?.id || currentIndex}-${photoIdx}`}
-                  source={{ uri: formatImageUrl(currentProfile.images[photoIdx]) }}
+                  key={currentProfile?.id || currentIndex}
+                  source={{ uri: formatImageUrl(currentProfile?.images?.[Math.min(photoIdx, (currentProfile?.images?.length || 1) - 1)] || currentProfile?.images?.[0]) }}
                   style={styles.cardPhoto}
                   resizeMode="cover"
                 />
@@ -732,7 +774,12 @@ export default function DiscoverScreen() {
 
                 <Animated.View style={{ opacity: detailsOpacity, width: '100%', position: 'absolute', bottom: 0 }} pointerEvents="box-none">
                   <TouchableOpacity activeOpacity={0.9} onPress={openDetail} style={styles.cardTextOverlayBottomLeft}>
-                    <Text style={styles.cardProfileName}>{currentProfile.name}, {currentProfile.age}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={styles.cardProfileName}>{currentProfile.name}{currentProfile.showAge !== false ? `, ${currentProfile.age}` : ''}</Text>
+                      {(currentProfile.isVerified || currentProfile.user?.is_verified) && (
+                        <Ionicons name="checkmark-circle" size={19} color="#3897F0" style={{ marginLeft: 6, marginTop: 2 }} />
+                      )}
+                    </View>
                     <Text style={styles.cardProfileJob}>{currentProfile.job}</Text>
                   </TouchableOpacity>
                 </Animated.View>
@@ -794,9 +841,10 @@ export default function DiscoverScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={() => navigation.navigate('Plans')}
+              onPress={handleSparkPress}
               activeOpacity={0.8}
               style={styles.actionBtnLargeLightning}
+              disabled={isAnimating}
             >
               <LinearGradient
                 colors={['#FF007F', '#B5179E']}

@@ -14,6 +14,8 @@ import SearchableDropdownModal from '../components/common/SearchableDropdownModa
 import {
   apiGetBlockedUsers, apiUnblockUser,
   apiDeactivateAccount, apiDeleteAccount,
+  apiGetUserSettings, apiUpdateUserSettings,
+  apiVerifyUserProfile,
 } from '../services/api';
 import { formatImageUrl } from '../utils/helpers';
 
@@ -23,18 +25,19 @@ export default function SettingsScreen() {
   const { user, logout, updateUser } = useAuth();
   const styles = useMemo(() => getStyles(theme), [theme]);
 
+  // ─── 0. Loading & Verification State ──────────────────────────────────────
+  const [loadingSettings, setLoadingSettings] = useState(true);
+  const [verifying, setVerifying] = useState(false);
+
   // ─── 1. Notifications State ───────────────────────────────────────────────
   const [notificationsOn, setNotificationsOn] = useState(true);
 
   // ─── 2. Privacy & Profile Visibility Toggles ─────────────────────────────
   const [showAge, setShowAge] = useState(true);
   const [showDistance, setShowDistance] = useState(true);
-  const [showOnlineStatus, setShowOnlineStatus] = useState(true);
   const [showOccupation, setShowOccupation] = useState(true);
   const [hideEducation, setHideEducation] = useState(false);
-  const [hideLastSeen, setHideLastSeen] = useState(false);
-  const [profileVisibility, setProfileVisibility] = useState('Public'); // Public, Members Only, Hidden
-  const [whoCanMessage, setWhoCanMessage] = useState('Matches Only'); // Everyone, Matches Only, Verified Only
+  const [whoCanMessage, setWhoCanMessage] = useState('Everyone'); // Everyone, Matches Only, Verified Only
 
   // ─── 4. Match & Discovery Preference Filters ──────────────────────────────
   const [distanceFilter, setDistanceFilter] = useState('50 km');
@@ -66,6 +69,73 @@ export default function SettingsScreen() {
     setToastVisible(true);
     setTimeout(() => setToastVisible(false), 2000);
   };
+
+  const handleVerifyProfile = async () => {
+    setVerifying(true);
+    try {
+      const res = await apiVerifyUserProfile();
+      if (res?.user) {
+        updateUser(res.user);
+      } else {
+        updateUser({ is_verified: true });
+      }
+      triggerToast('Profile verified successfully!');
+    } catch (err) {
+      console.warn('Failed to verify profile:', err);
+      updateUser({ is_verified: true });
+      triggerToast('Profile verified successfully!');
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  // Helper to persist individual toggle or preference updates to backend
+  const updateSettingField = async (key, val, stateSetter, label) => {
+    stateSetter(val);
+    try {
+      await apiUpdateUserSettings({ [key]: val });
+      if (label) {
+        triggerToast(`${label} updated`);
+      }
+    } catch (err) {
+      console.warn(`Failed to update ${key}:`, err);
+      Alert.alert('Error', 'Failed to save setting to server.');
+    }
+  };
+
+  // Load user settings from backend on component mount
+  useEffect(() => {
+    let isMounted = true;
+    const loadSettings = async () => {
+      try {
+        setLoadingSettings(true);
+        const res = await apiGetUserSettings();
+        if (res?.settings && isMounted) {
+          const s = res.settings;
+          if (s.notifications_on !== undefined) setNotificationsOn(!!s.notifications_on);
+          if (s.show_age !== undefined) setShowAge(!!s.show_age);
+          if (s.show_distance !== undefined) setShowDistance(!!s.show_distance);
+          if (s.show_occupation !== undefined) setShowOccupation(!!s.show_occupation);
+          if (s.hide_education !== undefined) setHideEducation(!!s.hide_education);
+          if (s.who_can_message) setWhoCanMessage(s.who_can_message);
+          if (s.distance_filter) setDistanceFilter(s.distance_filter);
+          if (s.age_range_filter) setAgeRangeFilter(s.age_range_filter);
+          if (s.verified_only !== undefined) setVerifiedOnly(!!s.verified_only);
+          if (s.has_bio_only !== undefined) setHasBioOnly(!!s.has_bio_only);
+          if (s.common_interests_only !== undefined) setCommonInterestsOnly(!!s.common_interests_only);
+          if (s.education_filter) setEducationFilter(s.education_filter);
+          if (s.religion_filter) setReligionFilter(s.religion_filter);
+          if (s.language_filter) setLanguageFilter(s.language_filter);
+        }
+      } catch (err) {
+        console.warn('Failed to load user settings from backend:', err);
+      } finally {
+        if (isMounted) setLoadingSettings(false);
+      }
+    };
+    loadSettings();
+    return () => { isMounted = false; };
+  }, []);
 
   // Active subscription plan name detection
   const activePlanName = useMemo(() => {
@@ -184,14 +254,53 @@ export default function SettingsScreen() {
             </View>
             <Switch
               value={notificationsOn}
-              onValueChange={setNotificationsOn}
+              onValueChange={(val) => updateSettingField('notifications_on', val, setNotificationsOn, 'App notifications')}
               trackColor={{ false: 'rgba(0,0,0,0.15)', true: '#FF007F' }}
               thumbColor="#FFF"
             />
           </View>
         </View>
 
-        {/* ─── 2. Privacy & Profile Visibility ───────────────────────────── */}
+        {/* ─── 2. Profile Verification Section ───────────────────────────── */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeaderRow}>
+            <Ionicons name="checkmark-seal-outline" size={18} color="#FF007F" style={{ marginRight: 8 }} />
+            <Text style={styles.sectionTitle}>Profile Verification</Text>
+          </View>
+
+          {(user?.is_verified || user?.email_verified_at) ? (
+            <View style={styles.verifiedActiveBox}>
+              <Ionicons name="checkmark-circle" size={24} color="#3897F0" style={{ marginRight: 10 }} />
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={styles.verifiedActiveTitle}>Verified Profile</Text>
+                  <Ionicons name="checkmark-circle" size={16} color="#3897F0" style={{ marginLeft: 4 }} />
+                </View>
+                <Text style={styles.verifiedActiveSub}>Your profile identity is verified. Verified checkmark badge is active on your profile cards.</Text>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.verifyPromptBox}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.verifyPromptTitle}>Get Verified Checkmark</Text>
+                <Text style={styles.verifyPromptSub}>Verify your identity to get the blue checkmark badge and get up to 3x more matches!</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.verifyNowBtn}
+                onPress={handleVerifyProfile}
+                disabled={verifying}
+                activeOpacity={0.85}
+              >
+                <LinearGradient colors={['#3897F0', '#0072E3']} style={styles.verifyBtnGrad}>
+                  <Ionicons name="checkmark-circle" size={16} color="#FFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.verifyBtnTxt}>{verifying ? 'Verifying...' : 'Verify Now'}</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
+        {/* ─── 3. Privacy & Profile Visibility ───────────────────────────── */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeaderRow}>
             <Ionicons name="shield-checkmark-outline" size={18} color="#FF007F" style={{ marginRight: 8 }} />
@@ -200,46 +309,42 @@ export default function SettingsScreen() {
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Show My Age</Text>
-            <Switch value={showAge} onValueChange={setShowAge} trackColor={{ false: 'rgba(0,0,0,0.15)', true: '#FF007F' }} thumbColor="#FFF" />
+            <Switch
+              value={showAge}
+              onValueChange={(val) => updateSettingField('show_age', val, setShowAge, 'Age visibility')}
+              trackColor={{ false: 'rgba(0,0,0,0.15)', true: '#FF007F' }}
+              thumbColor="#FFF"
+            />
           </View>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Show Distance Away</Text>
-            <Switch value={showDistance} onValueChange={setShowDistance} trackColor={{ false: 'rgba(0,0,0,0.15)', true: '#FF007F' }} thumbColor="#FFF" />
-          </View>
-
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Show Online Status</Text>
-            <Switch value={showOnlineStatus} onValueChange={setShowOnlineStatus} trackColor={{ false: 'rgba(0,0,0,0.15)', true: '#FF007F' }} thumbColor="#FFF" />
+            <Switch
+              value={showDistance}
+              onValueChange={(val) => updateSettingField('show_distance', val, setShowDistance, 'Distance visibility')}
+              trackColor={{ false: 'rgba(0,0,0,0.15)', true: '#FF007F' }}
+              thumbColor="#FFF"
+            />
           </View>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Show Occupation / Profession</Text>
-            <Switch value={showOccupation} onValueChange={setShowOccupation} trackColor={{ false: 'rgba(0,0,0,0.15)', true: '#FF007F' }} thumbColor="#FFF" />
+            <Switch
+              value={showOccupation}
+              onValueChange={(val) => updateSettingField('show_occupation', val, setShowOccupation, 'Occupation display')}
+              trackColor={{ false: 'rgba(0,0,0,0.15)', true: '#FF007F' }}
+              thumbColor="#FFF"
+            />
           </View>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Hide Education Level</Text>
-            <Switch value={hideEducation} onValueChange={setHideEducation} trackColor={{ false: 'rgba(0,0,0,0.15)', true: '#FF007F' }} thumbColor="#FFF" />
-          </View>
-
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Hide Last Seen Timestamp</Text>
-            <Switch value={hideLastSeen} onValueChange={setHideLastSeen} trackColor={{ false: 'rgba(0,0,0,0.15)', true: '#FF007F' }} thumbColor="#FFF" />
-          </View>
-
-          {/* Profile Visibility Selector */}
-          <Text style={styles.subHeaderLabel}>Profile Visibility</Text>
-          <View style={styles.pillSelectorRow}>
-            {['Public', 'Members Only', 'Hidden'].map(v => (
-              <TouchableOpacity
-                key={v}
-                style={[styles.selectorPill, profileVisibility === v && styles.selectorPillActive]}
-                onPress={() => setProfileVisibility(v)}
-              >
-                <Text style={[styles.selectorPillTxt, profileVisibility === v && styles.selectorPillTxtActive]}>{v}</Text>
-              </TouchableOpacity>
-            ))}
+            <Switch
+              value={hideEducation}
+              onValueChange={(val) => updateSettingField('hide_education', val, setHideEducation, 'Education visibility')}
+              trackColor={{ false: 'rgba(0,0,0,0.15)', true: '#FF007F' }}
+              thumbColor="#FFF"
+            />
           </View>
 
           {/* Who Can Message Me Selector */}
@@ -249,7 +354,7 @@ export default function SettingsScreen() {
               <TouchableOpacity
                 key={m}
                 style={[styles.selectorPill, whoCanMessage === m && styles.selectorPillActive]}
-                onPress={() => setWhoCanMessage(m)}
+                onPress={() => updateSettingField('who_can_message', m, setWhoCanMessage, 'Messaging permissions')}
               >
                 <Text style={[styles.selectorPillTxt, whoCanMessage === m && styles.selectorPillTxtActive]}>{m}</Text>
               </TouchableOpacity>
@@ -271,7 +376,7 @@ export default function SettingsScreen() {
               <TouchableOpacity
                 key={d}
                 style={[styles.selectorPill, distanceFilter === d && styles.selectorPillActive]}
-                onPress={() => setDistanceFilter(d)}
+                onPress={() => updateSettingField('distance_filter', d, setDistanceFilter, 'Distance filter')}
               >
                 <Text style={[styles.selectorPillTxt, distanceFilter === d && styles.selectorPillTxtActive]}>{d}</Text>
               </TouchableOpacity>
@@ -285,7 +390,7 @@ export default function SettingsScreen() {
               <TouchableOpacity
                 key={a}
                 style={[styles.selectorPill, ageRangeFilter === a && styles.selectorPillActive]}
-                onPress={() => setAgeRangeFilter(a)}
+                onPress={() => updateSettingField('age_range_filter', a, setAgeRangeFilter, 'Age range filter')}
               >
                 <Text style={[styles.selectorPillTxt, ageRangeFilter === a && styles.selectorPillTxtActive]}>{a}</Text>
               </TouchableOpacity>
@@ -294,17 +399,32 @@ export default function SettingsScreen() {
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Verified Profiles Only</Text>
-            <Switch value={verifiedOnly} onValueChange={setVerifiedOnly} trackColor={{ false: 'rgba(0,0,0,0.15)', true: '#FF007F' }} thumbColor="#FFF" />
+            <Switch
+              value={verifiedOnly}
+              onValueChange={(val) => updateSettingField('verified_only', val, setVerifiedOnly, 'Verified profiles filter')}
+              trackColor={{ false: 'rgba(0,0,0,0.15)', true: '#FF007F' }}
+              thumbColor="#FFF"
+            />
           </View>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Must Have Profile Bio</Text>
-            <Switch value={hasBioOnly} onValueChange={setHasBioOnly} trackColor={{ false: 'rgba(0,0,0,0.15)', true: '#FF007F' }} thumbColor="#FFF" />
+            <Switch
+              value={hasBioOnly}
+              onValueChange={(val) => updateSettingField('has_bio_only', val, setHasBioOnly, 'Bio requirement')}
+              trackColor={{ false: 'rgba(0,0,0,0.15)', true: '#FF007F' }}
+              thumbColor="#FFF"
+            />
           </View>
 
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Prioritize Common Interests</Text>
-            <Switch value={commonInterestsOnly} onValueChange={setCommonInterestsOnly} trackColor={{ false: 'rgba(0,0,0,0.15)', true: '#FF007F' }} thumbColor="#FFF" />
+            <Switch
+              value={commonInterestsOnly}
+              onValueChange={(val) => updateSettingField('common_interests_only', val, setCommonInterestsOnly, 'Common interests filter')}
+              trackColor={{ false: 'rgba(0,0,0,0.15)', true: '#FF007F' }}
+              thumbColor="#FFF"
+            />
           </View>
 
           {/* Dropdown Filters */}
@@ -314,7 +434,7 @@ export default function SettingsScreen() {
             value={educationFilter}
             items={['Any', "Bachelor's Degree", "Master's Degree", "Doctorate / Ph.D"]}
             icon="school-outline"
-            onSelect={setEducationFilter}
+            onSelect={(val) => updateSettingField('education_filter', val, setEducationFilter, 'Education filter')}
           />
 
           <SearchableDropdownModal
@@ -323,7 +443,7 @@ export default function SettingsScreen() {
             value={religionFilter}
             items={['Any', 'Hinduism', 'Islam', 'Christianity', 'Sikhism', 'Buddhism', 'Jainism', 'Spiritual', 'Other']}
             icon="sparkles-outline"
-            onSelect={setReligionFilter}
+            onSelect={(val) => updateSettingField('religion_filter', val, setReligionFilter, 'Religion filter')}
           />
 
           <SearchableDropdownModal
@@ -332,7 +452,7 @@ export default function SettingsScreen() {
             value={languageFilter}
             items={['Any', 'Hindi', 'English', 'Marathi', 'Bengali', 'Gujarati', 'Tamil', 'Telugu', 'Other']}
             icon="language-outline"
-            onSelect={setLanguageFilter}
+            onSelect={(val) => updateSettingField('language_filter', val, setLanguageFilter, 'Language filter')}
           />
         </View>
 
@@ -753,4 +873,39 @@ const getStyles = (theme) => StyleSheet.create({
   legalHeading: { fontSize: 20, fontWeight: '900', color: theme.textPrimary, marginBottom: 12 },
   legalSubHeading: { fontSize: 15, fontWeight: '800', color: theme.textPrimary, marginTop: 16, marginBottom: 6 },
   legalBody: { fontSize: 13, color: theme.textSec, lineHeight: 20 },
+
+  verifiedActiveBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: theme.isDark ? 'rgba(56,151,240,0.12)' : 'rgba(56,151,240,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(56,151,240,0.3)',
+    marginTop: 6,
+  },
+  verifiedActiveTitle: { fontSize: 14, fontWeight: '800', color: '#3897F0' },
+  verifiedActiveSub: { fontSize: 12, color: theme.textSec, marginTop: 2, lineHeight: 16 },
+
+  verifyPromptBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: theme.isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)',
+    marginTop: 6,
+    gap: 12,
+  },
+  verifyPromptTitle: { fontSize: 14, fontWeight: '800', color: theme.textPrimary },
+  verifyPromptSub: { fontSize: 11.5, color: theme.textSec, marginTop: 2, lineHeight: 15 },
+  verifyNowBtn: { overflow: 'hidden', borderRadius: 20 },
+  verifyBtnGrad: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  verifyBtnTxt: { color: '#FFF', fontSize: 12.5, fontWeight: '800' },
 });

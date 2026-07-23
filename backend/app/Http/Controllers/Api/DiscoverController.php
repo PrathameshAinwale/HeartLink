@@ -46,27 +46,44 @@ class DiscoverController extends Controller
             $query->whereIn(\Illuminate\Support\Facades\DB::raw('LOWER(gender)'), ['male', 'man']);
         }
 
-        $profiles = $query->with('photos')->orderBy('id', 'desc')->get();
+        // Apply user preference filters from user_settings table
+        $userSettings = \App\Models\UserSettings::where('user_id', $user->id)->first();
 
-        // If user has swiped through all available profiles, auto-reset pass swipes so profiles reappear!
-        if ($profiles->isEmpty()) {
-            Swipe::where('swiper_id', $user->id)->where('type', 'pass')->delete();
-
-            // Re-query without the cleared pass swipes
-            $swipedByMeIds = Swipe::where('swiper_id', $user->id)->pluck('swiped_user_id');
-            $excludeIds = $swipedByMeIds->merge($matchedIds)->merge($blockedIds)->unique();
-
-            $queryRetry = User::where('id', '!=', $user->id)
-                ->whereNotIn('id', $excludeIds);
-
-            if (in_array($userGender, ['male', 'man'])) {
-                $queryRetry->whereIn(\Illuminate\Support\Facades\DB::raw('LOWER(gender)'), ['female', 'woman']);
-            } elseif (in_array($userGender, ['female', 'woman'])) {
-                $queryRetry->whereIn(\Illuminate\Support\Facades\DB::raw('LOWER(gender)'), ['male', 'man']);
+        if ($userSettings) {
+            // Target Age Range Filter
+            if ($userSettings->age_range_filter && $userSettings->age_range_filter !== 'Any') {
+                $range = explode('-', str_replace(' ', '', $userSettings->age_range_filter));
+                if (count($range) === 2) {
+                    $query->whereBetween('age', [(int)$range[0], (int)$range[1]]);
+                }
             }
 
-            $profiles = $queryRetry->with('photos')->orderBy('id', 'desc')->get();
+            // Must Have Profile Bio Filter
+            if ($userSettings->has_bio_only) {
+                $query->whereNotNull('bio')->where('bio', '!=', '');
+            }
+
+            // Education Filter
+            if ($userSettings->education_filter && $userSettings->education_filter !== 'Any') {
+                $query->where('education', $userSettings->education_filter);
+            }
+
+            // Religion Filter
+            if ($userSettings->religion_filter && $userSettings->religion_filter !== 'Any') {
+                $query->where('religion', $userSettings->religion_filter);
+            }
+
+            // Language Filter
+            if ($userSettings->language_filter && $userSettings->language_filter !== 'Any') {
+                $lang = $userSettings->language_filter;
+                $query->where(function ($q) use ($lang) {
+                    $q->where('mother_tongue', 'LIKE', "%{$lang}%")
+                      ->orWhere('languages_spoken', 'LIKE', "%{$lang}%");
+                });
+            }
         }
+
+        $profiles = $query->with(['photos', 'settings'])->orderBy('id', 'desc')->get();
 
         return response()->json([
             'profiles' => $profiles,

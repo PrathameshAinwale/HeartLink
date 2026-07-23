@@ -123,14 +123,14 @@ class AuthController extends Controller
             'message'      => 'Login successful',
             'access_token' => $token,
             'token_type'   => 'Bearer',
-            'user'         => $user->load('photos', 'activeSubscription'),
+            'user'         => $user->load('photos', 'activeSubscription', 'settings'),
         ]);
     }
 
     public function profile(Request $request)
     {
         return response()->json([
-            'user' => $request->user()->load('photos', 'activeSubscription'),
+            'user' => $request->user()->load('photos', 'activeSubscription', 'settings'),
         ]);
     }
 
@@ -188,14 +188,17 @@ class AuthController extends Controller
             }
         }
 
-        if ($request->has('photos') && is_array($request->photos) && count($request->photos) > 0) {
-            $validPhotos = array_filter($request->photos, function ($url) {
-                return is_string($url) && !empty($url) && !str_starts_with($url, 'file://') && !str_starts_with($url, 'content://');
+        if ($request->has('photos') && is_array($request->photos)) {
+            $validPhotos = array_filter($request->photos, function ($p) {
+                $url = is_string($p) ? $p : ($p['photo_url'] ?? $p['uri'] ?? null);
+                return !empty($url) && !str_starts_with($url, 'file://') && !str_starts_with($url, 'content://');
             });
+
             if (count($validPhotos) > 0) {
                 ProfilePhoto::where('user_id', $user->id)->delete();
                 $idx = 0;
-                foreach ($validPhotos as $photoUrl) {
+                foreach ($validPhotos as $p) {
+                    $photoUrl = is_string($p) ? $p : ($p['photo_url'] ?? $p['uri']);
                     ProfilePhoto::create([
                         'user_id'    => $user->id,
                         'photo_url'  => $photoUrl,
@@ -209,7 +212,7 @@ class AuthController extends Controller
 
         return response()->json([
             'message' => 'Profile updated successfully',
-            'user'    => $user->load('photos'),
+            'user'    => $user->load('photos', 'activeSubscription', 'settings'),
         ]);
     }
 
@@ -314,6 +317,19 @@ class AuthController extends Controller
 
         return response()->json([
             'message' => 'Account deleted permanently',
+        ]);
+    }
+
+    public function verifyProfile(Request $request)
+    {
+        $user = $request->user();
+        $user->is_verified = true;
+        $user->email_verified_at = now();
+        $user->save();
+
+        return response()->json([
+            'message' => 'Profile verified successfully',
+            'user'    => $user->load('photos', 'activeSubscription', 'settings'),
         ]);
     }
 }

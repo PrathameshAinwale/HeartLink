@@ -73,24 +73,56 @@ class MatchController extends Controller
             ->merge(UserBlock::where('blocked_user_id', $userId)->pluck('blocker_id'))
             ->unique();
 
-        // Admirers who liked the user but:
-        //  1. Haven't been swiped back yet
-        //  2. Haven't been explicitly declined (is_declined_by_receiver = false)
-        //  3. Are not blocked
-        $admirerIds = Swipe::where('swiped_user_id', $userId)
-            ->whereIn('type', ['like', 'super_like'])
-            ->where('is_declined_by_receiver', false)
-            ->whereNotIn('swiper_id', $blockedIds)
-            ->whereNotIn('swiper_id', function ($query) use ($userId) {
-                $query->select('swiped_user_id')
-                    ->from('swipes')
-                    ->where('swiper_id', $userId);
-            })
-            ->pluck('swiper_id');
+        $matchedIds = UserMatch::where('user_1_id', $userId)
+            ->orWhere('user_2_id', $userId)
+            ->get()
+            ->flatMap(fn($m) => [$m->user_1_id, $m->user_2_id])
+            ->filter(fn($id) => $id !== $userId)
+            ->toArray();
 
-        $requests = User::whereIn('id', $admirerIds)
+        $swipes = Swipe::where('swiped_user_id', $userId)
+            ->whereIn('type', ['like', 'super_like'])
+            ->whereNotIn('swiper_id', $blockedIds)
+            ->orderBy('id', 'desc')
+            ->get()
+            ->unique('swiper_id')
+            ->keyBy('swiper_id');
+
+        $requests = User::whereIn('id', $swipes->keys())
             ->with('photos')
-            ->get();
+            ->get()
+            ->map(function ($u) use ($swipes, $matchedIds) {
+                $swipe = $swipes->get($u->id);
+                $isMatched = in_array($u->id, $matchedIds);
+                $isDeclined = $swipe ? (bool) $swipe->is_declined_by_receiver : false;
+
+                $status = 'pending';
+                if ($isMatched) {
+                    $status = 'accepted';
+                } elseif ($isDeclined) {
+                    $status = 'declined';
+                }
+
+                $u->request_status = $status;
+                $u->is_boosted = ($swipe && $swipe->type === 'super_like') || (bool) ($u->is_boosted ?? false);
+                $u->swipe_type = $swipe ? $swipe->type : 'like';
+                $u->date_sent = $swipe ? $swipe->created_at->format('M d, Y') : now()->format('M d, Y');
+                $u->timestamp = $swipe ? $swipe->created_at->timestamp : time();
+                return $u;
+            })
+            ->sort(function ($a, $b) {
+                if ($a->is_boosted !== $b->is_boosted) {
+                    return $b->is_boosted ? 1 : -1;
+                }
+                $score = ['pending' => 3, 'accepted' => 2, 'declined' => 1];
+                $scoreA = $score[$a->request_status] ?? 0;
+                $scoreB = $score[$b->request_status] ?? 0;
+                if ($scoreA !== $scoreB) {
+                    return $scoreB - $scoreA;
+                }
+                return $b->timestamp - $a->timestamp;
+            })
+            ->values();
 
         return response()->json([
             'requests' => $requests,

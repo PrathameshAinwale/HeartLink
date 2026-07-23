@@ -18,7 +18,6 @@ const { width, height } = Dimensions.get('window');
 
 export default function RequestsScreen() {
   const navigation = useNavigation();
-  const [boosted, setBoosted] = useState(null);
   const [requests, setRequests] = useState([]);
   const [selectedProfile, setSelectedProfile] = useState(null);
   const [detailVisible, setDetailVisible] = useState(false);
@@ -36,6 +35,10 @@ export default function RequestsScreen() {
           if (u.avatar && !rawPhotos.includes(u.avatar)) rawPhotos.unshift(u.avatar);
           const formattedPhotos = rawPhotos.map(p => formatImageUrl(p)).filter(Boolean);
 
+          const isBoosted = !!(u.is_boosted || u.swipe_type === 'super_like');
+          const dateStr = u.date_sent || 'Recently';
+          const reqStatus = u.request_status || 'pending';
+
           return {
             id: u.id,
             name: u.name,
@@ -44,12 +47,23 @@ export default function RequestsScreen() {
             image: formatImageUrl(rawAvatar),
             images: formattedPhotos.length > 0 ? formattedPhotos : ['https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600'],
             interests: ensureArray(u.interests, ['Travel', 'Music', 'Photography']),
-            likedAt: 'Recently',
+            likedAt: dateStr,
+            dateSent: dateStr,
             bio: u.bio || 'Interested in connecting with you!',
             compatibility: u.compatibility_score || 92,
             mutuals: [],
+            is_boosted: isBoosted,
+            status: reqStatus,
           };
         });
+
+        // Boosted & Pending requests come first, followed by date
+        apiList.sort((a, b) => {
+          if (a.is_boosted !== b.is_boosted) return b.is_boosted ? 1 : -1;
+          const rank = { pending: 3, accepted: 2, declined: 1 };
+          return (rank[b.status] || 0) - (rank[a.status] || 0);
+        });
+
         setRequests(apiList);
       }
     } catch (e) {
@@ -69,31 +83,22 @@ export default function RequestsScreen() {
   const [declineAlertVisible, setDeclineAlertVisible] = useState(false);
 
   const accept = async (id) => {
+    setRequests(prev => prev.map(r => r.id === id ? { ...r, status: 'accepted' } : r));
     try {
       await apiAcceptRequest(id);
     } catch (e) {
       console.warn('Accept error:', e?.message);
     }
-    if (boosted && boosted.id === id) {
-      setBoosted(null);
-    } else {
-      setRequests(p => p.filter(r => r.id !== id));
-    }
     setMatchAlertVisible(true);
   };
 
   const decline = async (id) => {
+    setRequests(prev => prev.map(r => r.id === id ? { ...r, status: 'declined' } : r));
     try {
       await apiDeclineRequest(id);
     } catch (e) {
       console.warn('Decline error:', e?.message);
     }
-    if (boosted && boosted.id === id) {
-      setBoosted(null);
-    } else {
-      setRequests(p => p.filter(r => r.id !== id));
-    }
-    // No alert shown — the requester will be notified via notifications
   };
 
   const openProfile = (profile) => {
@@ -106,98 +111,90 @@ export default function RequestsScreen() {
     setDetailVisible(true);
   };
 
-  const renderBoostedInquiry = () => {
-    if (!boosted) return null;
+  const renderAdmirer = ({ item }) => {
+    const isBoosted = item.is_boosted;
+    const isAccepted = item.status === 'accepted';
+    const isDeclined = item.status === 'declined';
+
     return (
-      <View style={styles.boostSection}>
-        <View style={styles.boostHeader}>
-          <LinearGradient colors={['#A78BFA', '#F472B6']} start={{ x:0, y:0 }} end={{ x:1, y:0 }} style={styles.boostHeaderIconGrad}>
-            <Ionicons name="flash" size={11} color="#fff" />
-          </LinearGradient>
-          <Text style={styles.boostHeaderTitle}>COSMIC BOOST INQUIRY</Text>
+      <TouchableOpacity
+        style={[styles.cardStrip, isBoosted && styles.cardStripBoosted]}
+        onPress={() => openProfile(item)}
+        activeOpacity={0.85}
+      >
+        <BlurView
+          intensity={isDark ? 40 : 60}
+          tint={isDark ? "dark" : "light"}
+          style={StyleSheet.absoluteFill}
+        />
+
+        {isBoosted && (
+          <LinearGradient
+            colors={['rgba(167, 139, 250, 0.25)', 'rgba(244, 114, 182, 0.25)']}
+            style={StyleSheet.absoluteFill}
+          />
+        )}
+
+        {/* Asymmetric avatar */}
+        <Image source={{ uri: item.image }} style={[styles.stripAvatar, isBoosted && styles.stripAvatarBoosted]} />
+        
+        <View style={styles.stripInfo}>
+          <View style={styles.stripTitleRow}>
+            <Text style={styles.stripName} numberOfLines={1}>{item.name}</Text>
+            {isBoosted && (
+              <View style={styles.boostPillTag}>
+                <Ionicons name="flash" size={9} color="#FFF" style={{ marginRight: 2 }} />
+                <Text style={styles.boostPillTxt}>BOOSTED</Text>
+              </View>
+            )}
+          </View>
+          
+          {/* Compatibility & Date Sent tag */}
+          <View style={[styles.stripCompatBadge, isBoosted && styles.stripCompatBadgeBoosted]}>
+            <Ionicons name={isBoosted ? "flash" : "heart"} size={8} color={isBoosted ? "#FFD700" : "#FF375F"} />
+            <Text style={[styles.stripCompatText, isBoosted && { color: theme.textPrimary }]}>
+              {item.compatibility}% match · {item.dateSent || item.likedAt}
+            </Text>
+          </View>
         </View>
 
-        <TouchableOpacity
-          style={styles.boostCard}
-          onPress={() => openProfile(boosted)}
-          activeOpacity={0.9}
-        >
-          <Image source={{ uri: boosted.image }} style={styles.boostCardImg} />
-          <LinearGradient colors={['transparent', 'rgba(10, 5, 28, 0.25)', 'rgba(10, 5, 28, 0.92)']} style={styles.boostCardOverlay} />
-
-          <View style={styles.boostCompatPill}>
-            <Ionicons name="heart" size={10} color="#fff" />
-            <Text style={styles.boostCompatText}>{boosted.compatibility}% Match</Text>
-          </View>
-
-          <View style={styles.boostDetails}>
-            <Text style={styles.boostName}>{boosted.name}, {boosted.age}</Text>
-            <Text style={styles.boostJob}>{boosted.job}</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <Ionicons name="flash" size={12} color="#FFD700" />
-              <Text style={styles.boostTime}>boosted {boosted.likedAt}</Text>
+        <View style={styles.stripActions}>
+          {isAccepted ? (
+            <View style={styles.acceptedPill}>
+              <Ionicons name="checkmark-circle" size={14} color="#30D158" style={{ marginRight: 4 }} />
+              <Text style={styles.acceptedPillTxt}>Accepted</Text>
             </View>
-          </View>
-
-          <View style={styles.boostActions}>
-            <TouchableOpacity style={styles.boostDecline} onPress={() => decline(boosted.id)}>
-              <Ionicons name="close" size={18} color="#FF375F" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.boostAccept} onPress={() => accept(boosted.id)}>
-              <LinearGradient colors={['#8B5CF6', '#D946EF']} style={styles.boostAcceptGrad}>
-                <Ionicons name="heart" size={18} color="#fff" />
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </View>
+          ) : isDeclined ? (
+            <View style={styles.declinedPill}>
+              <Ionicons name="close-circle" size={14} color="#8E8E93" style={{ marginRight: 4 }} />
+              <Text style={styles.declinedPillTxt}>Declined</Text>
+            </View>
+          ) : (
+            <>
+              <TouchableOpacity style={styles.stripDecline} onPress={() => decline(item.id)}>
+                <Ionicons name="close" size={16} color={theme.textSec} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.stripAccept} onPress={() => accept(item.id)}>
+                <LinearGradient
+                  colors={isBoosted ? ['#8B5CF6', '#D946EF'] : theme.gradientAccent}
+                  style={styles.stripAcceptGrad}
+                >
+                  <Ionicons name="checkmark" size={16} color="#fff" />
+                </LinearGradient>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      </TouchableOpacity>
     );
   };
 
-  const renderAdmirer = ({ item }) => (
-    <TouchableOpacity
-      style={styles.cardStrip}
-      onPress={() => openProfile(item)}
-      activeOpacity={0.85}
-    >
-      <BlurView
-        intensity={isDark ? 40 : 60}
-        tint={isDark ? "dark" : "light"}
-        style={StyleSheet.absoluteFill}
-      />
-      {/* Asymmetric border-radius leaf avatar */}
-      <Image source={{ uri: item.image }} style={styles.stripAvatar} />
-      
-      <View style={styles.stripInfo}>
-        <Text style={styles.stripName}>{item.name}, {item.age}</Text>
-        <Text style={styles.stripJob}>{item.job}</Text>
-        
-        {/* Compatibility tag */}
-        <View style={styles.stripCompatBadge}>
-          <Ionicons name="heart" size={8} color="#FF375F" />
-          <Text style={styles.stripCompatText}>{item.compatibility}% match · {item.likedAt}</Text>
-        </View>
-      </View>
-
-      <View style={styles.stripActions}>
-        <TouchableOpacity style={styles.stripDecline} onPress={() => decline(item.id)}>
-          <Ionicons name="close" size={16} color={theme.textSec} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.stripAccept} onPress={() => accept(item.id)}>
-          <LinearGradient colors={theme.gradientAccent} style={styles.stripAcceptGrad}>
-            <Ionicons name="checkmark" size={16} color="#fff" />
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
-    </TouchableOpacity>
-  );
+  const pendingCount = useMemo(() => {
+    return requests.filter(r => (r.status || r.request_status || 'pending') === 'pending').length;
+  }, [requests]);
 
   const renderHeader = () => (
     <View>
-      {/* Boost section card */}
-      {renderBoostedInquiry()}
-
-      {/* Title section for standard list */}
       {requests.length > 0 && (
         <Text style={styles.listSectionTitle}>All Requests</Text>
       )}
@@ -217,19 +214,19 @@ export default function RequestsScreen() {
         <View style={styles.header}>
           <View>
             <Text style={styles.title}>Requests</Text>
-            <Text style={styles.sub}>{requests.length + (boosted ? 1 : 0)} cosmic admirers</Text>
+            <Text style={styles.sub}>{requests.length} cosmic admirers</Text>
           </View>
           <TouchableOpacity style={styles.bellBtn} activeOpacity={0.8}>
             <Ionicons name="notifications" size={20} color={theme.textPrimary} />
-            {(requests.length + (boosted ? 1 : 0)) > 0 && (
+            {pendingCount > 0 && (
               <View style={styles.bellBadge}>
-                <Text style={styles.bellBadgeText}>{requests.length + (boosted ? 1 : 0)}</Text>
+                <Text style={styles.bellBadgeText}>{pendingCount}</Text>
               </View>
             )}
           </TouchableOpacity>
         </View>
 
-        {requests.length === 0 && !boosted ? (
+        {requests.length === 0 ? (
           <View style={styles.emptyWrap}>
             <View style={styles.emptyCard}>
               <Ionicons name="heart-half-outline" size={60} color={theme.textFaint} />
@@ -416,6 +413,11 @@ const getStyles = (theme) => StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 6,
   },
+  cardStripBoosted: {
+    borderColor: '#8B5CF6',
+    borderWidth: 1.5,
+    backgroundColor: theme.isDark ? 'rgba(139, 92, 246, 0.15)' : 'rgba(139, 92, 246, 0.08)',
+  },
   stripAvatar: {
     width: 66,
     height: 66,
@@ -424,16 +426,42 @@ const getStyles = (theme) => StyleSheet.create({
     borderTopRightRadius: 6,
     borderBottomLeftRadius: 6,
   },
+  stripAvatarBoosted: {
+    borderWidth: 2,
+    borderColor: '#8B5CF6',
+  },
   stripInfo: {
     flex: 1,
-    marginLeft: 14,
+    marginLeft: 12,
+    marginRight: 6,
     justifyContent: 'center',
   },
+  stripTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 4,
+  },
   stripName: {
-    fontSize: 15,
+    fontSize: 14.5,
     fontWeight: '800',
     color: theme.textPrimary,
     letterSpacing: -0.2,
+    flexShrink: 1,
+  },
+  boostPillTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#8B5CF6',
+    borderRadius: 8,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
+  boostPillTxt: {
+    color: '#FFF',
+    fontSize: 7.5,
+    fontWeight: '900',
+    letterSpacing: 0.4,
   },
   stripJob: {
     fontSize: 12,
@@ -451,6 +479,9 @@ const getStyles = (theme) => StyleSheet.create({
     marginTop: 4,
     alignSelf: 'flex-start',
   },
+  stripCompatBadgeBoosted: {
+    backgroundColor: 'rgba(139, 92, 246, 0.20)',
+  },
   stripCompatText: {
     color: '#FF375F',
     fontSize: 8.5,
@@ -458,8 +489,39 @@ const getStyles = (theme) => StyleSheet.create({
   },
   stripActions: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 6,
     alignItems: 'center',
+    flexShrink: 0,
+  },
+  acceptedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    backgroundColor: 'rgba(48, 209, 88, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(48, 209, 88, 0.3)',
+  },
+  acceptedPillTxt: {
+    color: '#30D158',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  declinedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    backgroundColor: 'rgba(142, 142, 147, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(142, 142, 147, 0.3)',
+  },
+  declinedPillTxt: {
+    color: '#8E8E93',
+    fontSize: 11,
+    fontWeight: '800',
   },
   stripDecline: {
     width: 32,

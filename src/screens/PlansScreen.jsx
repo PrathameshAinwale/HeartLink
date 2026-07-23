@@ -9,6 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
+import { useAuth } from '../hooks/useAuth';
 import CustomAlertModal from '../components/CustomAlertModal';
 import { apiSubscribePlan } from '../services/api';
 
@@ -91,6 +92,7 @@ const CARDS_DATA = [
 export default function PlansScreen() {
   const navigation = useNavigation();
   const { theme, isDark } = useTheme();
+  const { user, updateUser } = useAuth();
   const styles = useMemo(() => getStyles(theme), [theme]);
 
   const scrollX = useRef(new Animated.Value(0)).current;
@@ -110,17 +112,34 @@ export default function PlansScreen() {
     setCardDurations(prev => ({ ...prev, [cardId]: durationId }));
   };
 
-  const handleSubscribe = (card) => {
+  const handleSubscribe = async (card) => {
     const durId = cardDurations[card.id] || '6m';
     const durObj = card.durations.find(d => d.id === durId) || card.durations[1];
+    const planName = card.name;
+
     setPurchasedPlanName(`${card.name} (${durObj.label} at ${durObj.total})`);
     setSuccessAlertVisible(true);
 
-    apiSubscribePlan({
-      plan_name: card.name,
-      duration: durObj.label,
-      price: durObj.total,
-    }).catch(() => {});
+    // Update local user state immediately so Spark boost button works right away
+    updateUser({
+      subscription_plan: planName,
+      activeSubscription: { plan_name: planName },
+      active_subscription: { plan_name: planName },
+      plan: planName,
+    });
+
+    try {
+      const res = await apiSubscribePlan({
+        plan_name: planName,
+        duration: durObj.label,
+        price: durObj.total,
+      });
+      if (res?.user) {
+        updateUser(res.user);
+      }
+    } catch (e) {
+      console.warn('Subscription sync error:', e);
+    }
   };
 
   const renderCard = ({ item: card, index }) => {

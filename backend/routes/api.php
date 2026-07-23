@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\ChatController;
 use App\Http\Controllers\Api\DatePlannerController;
 use App\Http\Controllers\Api\SubscriptionController;
 use App\Http\Controllers\Api\RequestController;
+use App\Http\Controllers\Api\SettingsController;
 
 // API v1 Routes
 Route::prefix('v1')->group(function () {
@@ -21,7 +22,12 @@ Route::prefix('v1')->group(function () {
         // Auth & Profile
         Route::get('/user/profile',    [AuthController::class, 'profile']);
         Route::post('/user/profile',   [AuthController::class, 'updateProfile']);
+        Route::post('/user/verify',    [AuthController::class, 'verifyProfile']);
         Route::post('/auth/logout',    [AuthController::class, 'logout']);
+
+        // Settings & Preferences
+        Route::get('/user/settings',   [SettingsController::class, 'getSettings']);
+        Route::post('/user/settings',  [SettingsController::class, 'updateSettings']);
 
         // Discovery & Swiping
         Route::get('/discover',        [DiscoverController::class, 'feed']);

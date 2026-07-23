@@ -428,6 +428,17 @@ class DatabaseSeeder extends Seeder
                 'is_boosted'  => true,
             ],
             [
+                'name'        => 'Starlight Skybar & Lounge',
+                'category'    => 'Cosmic Rooftop & Mixology',
+                'rating'      => 4.95,
+                'location'    => 'Marina Bay Waterfront',
+                'image'       => 'https://images.unsplash.com/photo-1572116469696-31de0f17cc34?w=800',
+                'description' => 'Ultra-luxe rooftop deck with stargazing telescopes, neon infinity pools, and signature molecular cocktails.',
+                'price_range' => '$$$$',
+                'map_url'     => 'https://maps.google.com/?q=Starlight+Skybar',
+                'is_boosted'  => true,
+            ],
+            [
                 'name'        => 'Aura Garden Bistro',
                 'category'    => 'Organic Italian',
                 'rating'      => 4.8,

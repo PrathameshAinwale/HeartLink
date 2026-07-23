@@ -120,7 +120,7 @@ function CustomTabBar({ state, descriptors, navigation }) {
           ? (isDark ? '#fff' : '#0D0F1A') 
           : (isDark ? 'rgba(255,255,255,0.40)' : 'rgba(0,0,0,0.35)');
 
-        const badgeNum = route.name === 'Matches' ? requestCount : (route.name === 'Chat' ? unreadCount : 0);
+        const badgeNum = route.name === 'Chat' ? unreadCount : 0;
 
         return (
           <TouchableOpacity

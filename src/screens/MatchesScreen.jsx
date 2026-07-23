@@ -176,17 +176,6 @@ export default function MatchesScreen() {
           </View>
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <TouchableOpacity
-              style={styles.requestsHeaderBtn}
-              onPress={() => navigation.navigate('Requests')}
-              activeOpacity={0.8}
-            >
-              <LinearGradient colors={theme.gradientAccent} style={styles.requestsHeaderGrad}>
-                <Ionicons name="sparkles" size={13} color="#FFFFFF" style={{ marginRight: 5 }} />
-                <Text style={styles.requestsHeaderTxt}>Requests {requestCount > 0 ? `(${requestCount})` : ''}</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-
             <TouchableOpacity style={styles.iconBtn} onPress={() => setSearchOpen(p => !p)}>
               <Ionicons name={searchOpen ? 'close' : 'search'} size={19} color={theme.textPrimary} />
             </TouchableOpacity>

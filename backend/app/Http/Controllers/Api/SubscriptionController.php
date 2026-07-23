@@ -33,9 +33,14 @@ class SubscriptionController extends Controller
             'status'     => 'active',
         ]);
 
+        $user = $request->user();
+        $user->subscription_plan = $validated['plan_name'];
+        $user->save();
+
         return response()->json([
             'message'      => 'Subscription activated successfully! 🎉',
             'subscription' => $subscription,
+            'user'         => $user->load('photos', 'activeSubscription', 'settings'),
         ], 201);
     }
 }

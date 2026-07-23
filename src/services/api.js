@@ -295,9 +295,15 @@ export const apiReportUser = (reportedUserId, reason) => apiFetch('/users/report
   body: { reported_user_id: reportedUserId, reason },
 });
 
-// ─── Account Management API ──────────────────────────────────────────
+// ─── Account & Settings Management API ────────────────────────────────
 export const apiDeactivateAccount = () => apiFetch('/user/deactivate', { method: 'POST' });
 export const apiDeleteAccount     = () => apiFetch('/user/account', { method: 'DELETE' });
+export const apiVerifyUserProfile = () => apiFetch('/user/verify', { method: 'POST' });
+export const apiGetUserSettings   = () => apiFetch('/user/settings');
+export const apiUpdateUserSettings = (settingsData) => apiFetch('/user/settings', {
+  method: 'POST',
+  body: settingsData,
+});
 
 // ─── Date Planner API ────────────────────────────────────────────────
 export const apiGetRestaurants = () => apiFetch('/restaurants');
