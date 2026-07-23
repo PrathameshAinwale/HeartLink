@@ -311,6 +311,10 @@ export const apiCreateDateProposal = (proposalData) => apiFetch('/date-bookings'
   method: 'POST',
   body: proposalData,
 });
+export const apiRespondDateProposal = (bookingId, status) => apiFetch('/date-bookings/respond', {
+  method: 'POST',
+  body: { booking_id: bookingId, status },
+});
 
 // ─── Subscriptions API ───────────────────────────────────────────────
 export const apiSubscribePlan = (planData) => apiFetch('/subscriptions/subscribe', {

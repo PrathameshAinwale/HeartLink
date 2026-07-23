@@ -60,8 +60,9 @@ Route::prefix('v1')->group(function () {
         Route::delete('/user/account',     [AuthController::class, 'deleteAccount']);
 
         // Date Planner
-        Route::get('/restaurants',         [DatePlannerController::class, 'getRestaurants']);
-        Route::post('/date-bookings',      [DatePlannerController::class, 'createProposal']);
+        Route::get('/restaurants',          [DatePlannerController::class, 'getRestaurants']);
+        Route::post('/date-bookings',       [DatePlannerController::class, 'createProposal']);
+        Route::post('/date-bookings/respond', [DatePlannerController::class, 'respondProposal']);
 
         // Subscriptions
         Route::post('/subscriptions/subscribe', [SubscriptionController::class, 'subscribe']);

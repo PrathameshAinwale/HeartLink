@@ -96,7 +96,19 @@ export default function RestaurantDetailScreen() {
     });
   };
 
-  const confirmBooking = () => {
+  const confirmBooking = async () => {
+    try {
+      if (partner) {
+        await apiCreateDateProposal({
+          partner_id: partner,
+          restaurant_id: spot.id,
+          booking_date: formattedDate,
+          booking_time: formattedTime,
+        });
+      }
+    } catch (e) {
+      console.warn('Create proposal error:', e?.message);
+    }
     setBookingAlertVisible(true);
   };
 

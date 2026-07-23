@@ -88,7 +88,7 @@ class MatchController extends Controller
             ->unique('swiper_id')
             ->keyBy('swiper_id');
 
-        $requests = User::whereIn('id', $swipes->keys())
+        $likeRequests = User::whereIn('id', $swipes->keys())
             ->with('photos')
             ->get()
             ->map(function ($u) use ($swipes, $matchedIds) {
@@ -103,29 +103,74 @@ class MatchController extends Controller
                     $status = 'declined';
                 }
 
-                $u->request_status = $status;
-                $u->is_boosted = ($swipe && $swipe->type === 'super_like') || (bool) ($u->is_boosted ?? false);
-                $u->swipe_type = $swipe ? $swipe->type : 'like';
-                $u->date_sent = $swipe ? $swipe->created_at->format('M d, Y') : now()->format('M d, Y');
-                $u->timestamp = $swipe ? $swipe->created_at->timestamp : time();
-                return $u;
+                return [
+                    'id'             => 'swipe_' . $u->id,
+                    'user_id'        => $u->id,
+                    'type'           => 'match_request',
+                    'request_type'   => 'match_request',
+                    'is_outgoing'    => false,
+                    'name'           => $u->name,
+                    'avatar'         => $u->avatar ?: ($u->photos[0]->photo_url ?? null),
+                    'user'           => $u,
+                    'request_status' => $status,
+                    'is_boosted'     => ($swipe && $swipe->type === 'super_like') || (bool) ($u->is_boosted ?? false),
+                    'swipe_type'     => $swipe ? $swipe->type : 'like',
+                    'date_sent'      => $swipe ? $swipe->created_at->format('M d, Y') : now()->format('M d, Y'),
+                    'timestamp'      => $swipe ? $swipe->created_at->timestamp : time(),
+                ];
+            });
+
+        $dateProposals = \App\Models\DateBooking::where(function ($q) use ($userId) {
+                $q->where('partner_id', $userId)->orWhere('proposer_id', $userId);
             })
-            ->sort(function ($a, $b) {
-                if ($a->is_boosted !== $b->is_boosted) {
-                    return $b->is_boosted ? 1 : -1;
-                }
-                $score = ['pending' => 3, 'accepted' => 2, 'declined' => 1];
-                $scoreA = $score[$a->request_status] ?? 0;
-                $scoreB = $score[$b->request_status] ?? 0;
-                if ($scoreA !== $scoreB) {
-                    return $scoreB - $scoreA;
-                }
-                return $b->timestamp - $a->timestamp;
+            ->whereNotIn('proposer_id', $blockedIds)
+            ->whereNotIn('partner_id', $blockedIds)
+            ->with(['restaurant', 'proposer.photos', 'partner.photos'])
+            ->orderBy('id', 'desc')
+            ->get()
+            ->map(function ($b) use ($userId) {
+                $isOutgoing = $b->proposer_id === $userId;
+                $userObj = $isOutgoing ? $b->partner : $b->proposer;
+                if (!$userObj) return null;
+
+                return [
+                    'id'               => 'proposal_' . $b->id,
+                    'booking_id'       => $b->id,
+                    'type'             => 'date_proposal',
+                    'request_type'     => 'date_proposal',
+                    'is_outgoing'      => $isOutgoing,
+                    'name'             => $userObj->name,
+                    'avatar'           => $userObj->avatar ?: ($userObj->photos[0]->photo_url ?? null),
+                    'user'             => $userObj,
+                    'restaurant'       => $b->restaurant,
+                    'booking_date'     => $b->booking_date,
+                    'booking_time'     => $b->booking_time,
+                    'request_status'   => $b->status,
+                    'is_boosted'       => true,
+                    'date_sent'        => $b->created_at ? $b->created_at->format('M d, Y') : now()->format('M d, Y'),
+                    'timestamp'        => $b->created_at ? $b->created_at->timestamp : time(),
+                ];
             })
-            ->values();
+            ->filter();
+
+        $merged = $likeRequests->concat($dateProposals)->sort(function ($a, $b) {
+            $isBoostedA = $a['is_boosted'] ?? false;
+            $isBoostedB = $b['is_boosted'] ?? false;
+            if ($isBoostedA !== $isBoostedB) {
+                return $isBoostedB ? 1 : -1;
+            }
+            $score = ['pending' => 3, 'accepted' => 2, 'declined' => 1, 'rejected' => 1];
+            $scoreA = $score[$a['request_status']] ?? 0;
+            $scoreB = $score[$b['request_status']] ?? 0;
+            if ($scoreA !== $scoreB) {
+                return $scoreB - $scoreA;
+            }
+            return ($b['timestamp'] ?? 0) - ($a['timestamp'] ?? 0);
+        })->values();
 
         return response()->json([
-            'requests' => $requests,
+            'requests' => $merged,
         ]);
+    }
     }
 }

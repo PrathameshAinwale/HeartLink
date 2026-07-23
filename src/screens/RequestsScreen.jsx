@@ -11,7 +11,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import ProfileDetail from '../components/discovery/ProfileDetail';
 import CustomAlertModal from '../components/CustomAlertModal';
-import { apiGetRequests, apiAcceptRequest, apiDeclineRequest } from '../services/api';
+import { apiGetRequests, apiAcceptRequest, apiDeclineRequest, apiRespondDateProposal } from '../services/api';
 import { ensureArray, formatImageUrl } from '../utils/helpers';
 
 const { width, height } = Dimensions.get('window');
@@ -30,27 +30,33 @@ export default function RequestsScreen() {
       const res = await apiGetRequests();
       if (res?.requests && Array.isArray(res.requests)) {
         const apiList = res.requests.map(u => {
-          const rawAvatar = u.avatar || (u.photos && u.photos[0]?.photo_url) || '';
+          const rawAvatar = u.avatar || (u.photos && u.photos[0]?.photo_url) || (u.user && u.user.avatar) || '';
           const rawPhotos = ensureArray(u.photos?.map(p => (typeof p === 'string' ? p : (p ? (p.photo_url || p.uri) : null))).filter(Boolean));
-          if (u.avatar && !rawPhotos.includes(u.avatar)) rawPhotos.unshift(u.avatar);
+          if (rawAvatar && !rawPhotos.includes(rawAvatar)) rawPhotos.unshift(rawAvatar);
           const formattedPhotos = rawPhotos.map(p => formatImageUrl(p)).filter(Boolean);
 
-          const isBoosted = !!(u.is_boosted || u.swipe_type === 'super_like');
+          const isBoosted = !!(u.is_boosted || u.swipe_type === 'super_like' || u.type === 'date_proposal');
           const dateStr = u.date_sent || 'Recently';
           const reqStatus = u.request_status || 'pending';
 
           return {
             id: u.id,
+            booking_id: u.booking_id,
+            type: u.type || 'match_request',
+            is_outgoing: !!u.is_outgoing,
+            restaurant: u.restaurant,
+            booking_date: u.booking_date,
+            booking_time: u.booking_time,
             name: u.name,
-            age: u.age || 24,
-            job: u.job || 'Member',
+            age: u.user?.age || u.age || 24,
+            job: u.user?.job || u.job || 'Member',
             image: formatImageUrl(rawAvatar),
             images: formattedPhotos.length > 0 ? formattedPhotos : ['https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600'],
-            interests: ensureArray(u.interests, ['Travel', 'Music', 'Photography']),
+            interests: ensureArray(u.user?.interests || u.interests, ['Travel', 'Music', 'Photography']),
             likedAt: dateStr,
             dateSent: dateStr,
-            bio: u.bio || 'Interested in connecting with you!',
-            compatibility: u.compatibility_score || 92,
+            bio: u.user?.bio || u.bio || 'Interested in connecting with you!',
+            compatibility: u.user?.compatibility_score || u.compatibility_score || 92,
             mutuals: [],
             is_boosted: isBoosted,
             status: reqStatus,
@@ -111,10 +117,110 @@ export default function RequestsScreen() {
     setDetailVisible(true);
   };
 
+  const acceptDateProposal = async (item) => {
+    setRequests(prev => prev.map(r => r.id === item.id ? { ...r, status: 'accepted' } : r));
+    try {
+      await apiRespondDateProposal(item.booking_id, 'accepted');
+    } catch (e) {
+      console.warn('Accept date proposal error:', e?.message);
+    }
+  };
+
+  const declineDateProposal = async (item) => {
+    setRequests(prev => prev.map(r => r.id === item.id ? { ...r, status: 'declined' } : r));
+    try {
+      await apiRespondDateProposal(item.booking_id, 'declined');
+    } catch (e) {
+      console.warn('Decline date proposal error:', e?.message);
+    }
+  };
+
   const renderAdmirer = ({ item }) => {
     const isBoosted = item.is_boosted;
     const isAccepted = item.status === 'accepted';
-    const isDeclined = item.status === 'declined';
+    const isDeclined = item.status === 'declined' || item.status === 'rejected';
+
+    if (item.type === 'date_proposal') {
+      const restName = item.restaurant?.name || 'Romantic Restaurant';
+      const restImg = item.restaurant?.image_url || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600';
+
+      return (
+        <View style={styles.dateProposalCard}>
+          <BlurView intensity={isDark ? 55 : 85} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
+          <LinearGradient
+            colors={['rgba(245, 158, 11, 0.15)', 'rgba(255, 0, 127, 0.15)']}
+            style={StyleSheet.absoluteFill}
+          />
+
+          {/* Top Proposal Badge Banner */}
+          <View style={styles.dateProposalHeader}>
+            <LinearGradient colors={['#F59E0B', '#FF007F']} start={{ x:0, y:0 }} end={{ x:1, y:0 }} style={styles.dateProposalBadge}>
+              <Ionicons name="wine" size={11} color="#FFF" style={{ marginRight: 4 }} />
+              <Text style={styles.dateProposalBadgeTxt}>🍷 DATE PROPOSAL</Text>
+            </LinearGradient>
+            <Text style={styles.dateProposalTime}>{item.dateSent}</Text>
+          </View>
+
+          {/* Body: Person & Restaurant Info */}
+          <View style={styles.dateProposalBody}>
+            <TouchableOpacity onPress={() => openProfile(item)} activeOpacity={0.8} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+              <Image source={{ uri: item.image }} style={styles.dateProposalUserAvatar} />
+              <View style={{ flex: 1, marginLeft: 10 }}>
+                <Text style={styles.dateProposalUserTitle}>
+                  {item.is_outgoing ? `You proposed a date to ${item.name}` : `${item.name} invited you on a date!`}
+                </Text>
+                <Text style={styles.dateProposalSub}>{item.job} · {item.compatibility}% Match</Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Restaurant Box */}
+            <View style={styles.dateRestaurantBox}>
+              <Image source={{ uri: formatImageUrl(restImg) }} style={styles.dateRestaurantImg} />
+              <View style={{ flex: 1, marginLeft: 10 }}>
+                <Text style={styles.dateRestaurantName} numberOfLines={1}>{restName}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                  <Ionicons name="calendar-outline" size={12} color="#FF007F" style={{ marginRight: 4 }} />
+                  <Text style={styles.dateDetailsTxt}>{item.booking_date} at {item.booking_time}</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+
+          {/* Action Buttons / Status */}
+          <View style={styles.dateProposalFooter}>
+            {isAccepted ? (
+              <View style={styles.dateAcceptedPill}>
+                <Ionicons name="checkmark-circle" size={16} color="#30D158" style={{ marginRight: 6 }} />
+                <Text style={styles.dateAcceptedPillTxt}>Date Proposal Accepted! 🥂</Text>
+              </View>
+            ) : isDeclined ? (
+              <View style={styles.dateDeclinedPill}>
+                <Ionicons name="close-circle" size={16} color="#FF375F" style={{ marginRight: 6 }} />
+                <Text style={styles.dateDeclinedPillTxt}>Date Proposal Declined</Text>
+              </View>
+            ) : item.is_outgoing ? (
+              <View style={styles.datePendingPill}>
+                <Ionicons name="time-outline" size={14} color="#F59E0B" style={{ marginRight: 6 }} />
+                <Text style={styles.datePendingPillTxt}>Waiting for {item.name}'s response...</Text>
+              </View>
+            ) : (
+              <View style={{ flexDirection: 'row', gap: 10, flex: 1, marginTop: 4 }}>
+                <TouchableOpacity style={styles.dateDeclineBtn} onPress={() => declineDateProposal(item)}>
+                  <Ionicons name="close-circle" size={15} color="#FF375F" style={{ marginRight: 4 }} />
+                  <Text style={styles.dateDeclineBtnTxt}>Decline</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.dateAcceptBtn} onPress={() => acceptDateProposal(item)}>
+                  <LinearGradient colors={['#30D158', '#10B981']} start={{ x:0, y:0 }} end={{ x:1, y:0 }} style={styles.dateAcceptGrad}>
+                    <Ionicons name="checkmark-circle" size={15} color="#FFF" style={{ marginRight: 4 }} />
+                    <Text style={styles.dateAcceptBtnTxt}>Accept Date 🥂</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </View>
+      );
+    }
 
     return (
       <TouchableOpacity
@@ -555,4 +661,167 @@ const getStyles = (theme) => StyleSheet.create({
   },
   emptyTitle: { fontSize: 20, fontWeight: '800', color: theme.textPrimary },
   emptySub:   { fontSize: 14, color: theme.textSec, textAlign: 'center', lineHeight: 21 },
+
+  // Date Proposal Card Styles
+  dateProposalCard: {
+    backgroundColor: theme.glass,
+    borderRadius: 24,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1.5,
+    borderColor: '#F59E0B',
+    overflow: 'hidden',
+    shadowColor: '#F59E0B',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: theme.isDark ? 0.35 : 0.15,
+    shadowRadius: 10,
+  },
+  dateProposalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  dateProposalBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  dateProposalBadgeTxt: {
+    color: '#FFF',
+    fontSize: 9.5,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  dateProposalTime: {
+    fontSize: 11,
+    color: theme.textSec,
+    fontWeight: '600',
+  },
+  dateProposalBody: {
+    marginBottom: 10,
+  },
+  dateProposalUserAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    borderColor: '#FF007F',
+  },
+  dateProposalUserTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: theme.textPrimary,
+  },
+  dateProposalSub: {
+    fontSize: 11.5,
+    color: theme.textSec,
+    marginTop: 2,
+  },
+  dateRestaurantBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.03)',
+    borderRadius: 14,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  dateRestaurantImg: {
+    width: 50,
+    height: 50,
+    borderRadius: 10,
+  },
+  dateRestaurantName: {
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: theme.textPrimary,
+  },
+  dateDetailsTxt: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FF007F',
+  },
+  dateProposalFooter: {
+    marginTop: 6,
+  },
+  dateAcceptedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: 'rgba(48, 209, 88, 0.15)',
+    borderWidth: 1,
+    borderColor: '#30D158',
+  },
+  dateAcceptedPillTxt: {
+    color: '#30D158',
+    fontSize: 12.5,
+    fontWeight: '800',
+  },
+  dateDeclinedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 55, 95, 0.12)',
+    borderWidth: 1,
+    borderColor: '#FF375F',
+  },
+  dateDeclinedPillTxt: {
+    color: '#FF375F',
+    fontSize: 12.5,
+    fontWeight: '800',
+  },
+  datePendingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+  },
+  datePendingPillTxt: {
+    color: '#F59E0B',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  dateDeclineBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 55, 95, 0.12)',
+    borderWidth: 1,
+    borderColor: '#FF375F',
+  },
+  dateDeclineBtnTxt: {
+    color: '#FF375F',
+    fontSize: 12.5,
+    fontWeight: '800',
+  },
+  dateAcceptBtn: {
+    flex: 1.4,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  dateAcceptGrad: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  dateAcceptBtnTxt: {
+    color: '#FFF',
+    fontSize: 12.5,
+    fontWeight: '800',
+  },
 });

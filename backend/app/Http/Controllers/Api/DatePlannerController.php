@@ -43,4 +43,29 @@ class DatePlannerController extends Controller
             'booking' => $booking->load('restaurant', 'partner'),
         ], 201);
     }
+
+    public function respondProposal(Request $request)
+    {
+        $validated = $request->validate([
+            'booking_id' => 'required|exists:date_bookings,id',
+            'status'     => 'required|in:accepted,rejected,declined',
+        ]);
+
+        $userId = $request->user()->id;
+        $booking = DateBooking::where('id', $validated['booking_id'])
+            ->where('partner_id', $userId)
+            ->first();
+
+        if (!$booking) {
+            return response()->json(['message' => 'Date proposal not found or access denied.'], 404);
+        }
+
+        $newStatus = in_array($validated['status'], ['rejected', 'declined']) ? 'declined' : 'accepted';
+        $booking->update(['status' => $newStatus]);
+
+        return response()->json([
+            'message' => "Date proposal {$newStatus} successfully! 🥂",
+            'booking' => $booking->load('restaurant', 'proposer', 'partner'),
+        ]);
+    }
 }
