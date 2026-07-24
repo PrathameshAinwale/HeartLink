@@ -374,10 +374,12 @@ export default function DiscoverScreen() {
   // 1. Present profile swipes off (background cards hidden so next profile does NOT peek)
   // 2. Message appears and disappears on clean screen
   // 3. Next profile comes smoothly onto user screen
-  const moveToNext = (swipeType = 'like') => {
+  const moveToNext = (rawSwipeType = 'like') => {
     if (isAnimating) return;
     setIsAnimating(true);
     setPhotoIdx(0);
+
+    const swipeType = (typeof rawSwipeType === 'string' && ['like', 'super_like'].includes(rawSwipeType)) ? rawSwipeType : 'like';
 
     const currentP = currentProfile;
     if (currentP && currentP.id) {
@@ -858,7 +860,7 @@ export default function DiscoverScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={moveToNext}
+              onPress={() => moveToNext('like')}
               activeOpacity={0.8}
               style={styles.actionBtnSmallHeart}
               disabled={isAnimating}
@@ -877,7 +879,7 @@ export default function DiscoverScreen() {
           onClose={closeDetail}
           onLike={() => {
             closeDetail();
-            moveToNext();
+            moveToNext('like');
           }}
           onPass={() => {
             closeDetail();

@@ -11,7 +11,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import ProfileDetail from '../components/discovery/ProfileDetail';
 import CustomAlertModal from '../components/CustomAlertModal';
-import { apiGetRequests, apiAcceptRequest, apiDeclineRequest, apiRespondDateProposal } from '../services/api';
+import { apiGetRequests, apiAcceptRequest, apiDeclineRequest, apiRespondDateProposal, apiUnmatchUser } from '../services/api';
 import { ensureArray, formatImageUrl } from '../utils/helpers';
 
 const { width, height } = Dimensions.get('window');
@@ -115,6 +115,25 @@ export default function RequestsScreen() {
     };
     setSelectedProfile(formatted);
     setDetailVisible(true);
+  };
+
+  const unmatchAndRemove = async (item) => {
+    if (!item) return;
+    const rawId = item.id;
+    const targetUserId = item.user_id || (typeof rawId === 'string' ? rawId.replace('swipe_', '').replace('proposal_', '') : rawId);
+    setRequests(prev => prev.filter(r => r.id !== item.id));
+    try {
+      await apiUnmatchUser(targetUserId);
+    } catch (e) {
+      console.warn('Unmatch error:', e?.message);
+    }
+  };
+
+  const openChatForProfile = (item) => {
+    if (!item) return;
+    const rawId = item.id;
+    const targetUserId = item.user_id || (typeof rawId === 'string' ? rawId.replace('swipe_', '').replace('proposal_', '') : rawId);
+    navigation.navigate('ChatDetail', { userId: targetUserId });
   };
 
   const acceptDateProposal = async (item) => {
@@ -360,8 +379,19 @@ export default function RequestsScreen() {
           setDetailVisible(false);
           setSelectedProfile(null);
         }}
-        onLike={accept}
-        onPass={decline}
+        onLike={selectedProfile?.status === 'accepted' ? () => {
+          const p = selectedProfile;
+          setDetailVisible(false);
+          setSelectedProfile(null);
+          openChatForProfile(p);
+        } : (id) => accept(id)}
+        onPass={selectedProfile?.status === 'accepted' ? () => {
+          const p = selectedProfile;
+          setDetailVisible(false);
+          setSelectedProfile(null);
+          unmatchAndRemove(p);
+        } : (id) => decline(id)}
+        isMatch={selectedProfile?.status === 'accepted'}
       />
 
       <CustomAlertModal
@@ -605,7 +635,7 @@ const getStyles = (theme) => StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 10,
-    backgroundColor: 'rgba(48, 209, 88, 0.12)',
+    backgroundColor: 'rgba(255, 255, 255, 1)',
     borderWidth: 1,
     borderColor: 'rgba(48, 209, 88, 0.3)',
   },
@@ -620,7 +650,7 @@ const getStyles = (theme) => StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 10,
-    backgroundColor: 'rgba(142, 142, 147, 0.12)',
+    backgroundColor: 'rgba(255, 255, 255, 1)',
     borderWidth: 1,
     borderColor: 'rgba(142, 142, 147, 0.3)',
   },
@@ -753,7 +783,7 @@ const getStyles = (theme) => StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 8,
     borderRadius: 12,
-    backgroundColor: 'rgba(48, 209, 88, 0.15)',
+    backgroundColor: 'rgba(255, 255, 255, 1)',
     borderWidth: 1,
     borderColor: '#30D158',
   },

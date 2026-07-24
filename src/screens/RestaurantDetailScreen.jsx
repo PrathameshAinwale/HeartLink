@@ -80,6 +80,14 @@ export default function RestaurantDetailScreen() {
     return selectedDate.toLocaleDateString('en-US', options);
   }, [selectedDate]);
 
+  const isoDateStr = useMemo(() => {
+    const d = new Date(selectedDate);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }, [selectedDate]);
+
   const formattedTime = useMemo(() => {
     const options = { hour: '2-digit', minute: '2-digit', hour12: true };
     return selectedDate.toLocaleTimeString('en-US', options);
@@ -102,7 +110,7 @@ export default function RestaurantDetailScreen() {
         await apiCreateDateProposal({
           partner_id: partner,
           restaurant_id: spot.id,
-          booking_date: formattedDate,
+          booking_date: isoDateStr,
           booking_time: formattedTime,
         });
       }

@@ -277,6 +277,10 @@ export const apiSendMessage = (receiverId, message) => apiFetch('/chats/send', {
   method: 'POST',
   body: { receiver_id: receiverId, message },
 });
+export const apiReactMessage = (receiverId, emoji, messageId) => apiFetch('/chats/react', {
+  method: 'POST',
+  body: { receiver_id: receiverId, emoji, message_id: messageId },
+});
 export const apiGetBlockedUsers = () => apiFetch('/users/blocked');
 export const apiBlockUser = (blockedUserId) => apiFetch('/users/block', {
   method: 'POST',

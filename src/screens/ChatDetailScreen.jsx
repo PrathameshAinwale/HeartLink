@@ -25,6 +25,7 @@ import { useTheme } from '../theme/ThemeContext';
 import ProfileDetail from '../components/discovery/ProfileDetail';
 import {
   apiSendMessage,
+  apiReactMessage,
   apiBlockUser,
   apiUnblockUser,
   apiReportUser,
@@ -695,14 +696,23 @@ export default function ChatDetailScreen() {
   const [activeReactionMsgId, setActiveReactionMsgId] = useState(null);
 
   const handleToggleReaction = useCallback((msgId, emoji) => {
-    setMessages((prev) =>
-      prev.map((m) =>
+    setMessages((prev) => {
+      const targetMsg = prev.find((m) => m.id === msgId);
+      const newReaction = targetMsg?.reaction === emoji ? null : emoji;
+
+      if (newReaction && targetId) {
+        apiReactMessage(targetId, newReaction, msgId).catch((err) => {
+          console.warn('React message error:', err?.message);
+        });
+      }
+
+      return prev.map((m) =>
         m.id === msgId
-          ? { ...m, reaction: m.reaction === emoji ? null : emoji }
+          ? { ...m, reaction: newReaction }
           : m
-      )
-    );
-  }, []);
+      );
+    });
+  }, [targetId]);
 
   const renderMsg = useCallback(
     ({ item }) => (

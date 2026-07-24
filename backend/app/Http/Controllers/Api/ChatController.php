@@ -148,6 +148,37 @@ class ChatController extends Controller
         ], 201);
     }
 
+    public function reactMessage(Request $request)
+    {
+        $validated = $request->validate([
+            'receiver_id' => 'required|exists:users,id',
+            'emoji'       => 'nullable|string',
+            'message_id'  => 'nullable',
+        ]);
+
+        $sender = $request->user();
+        $senderId = $sender->id;
+        $receiverId = (int) $validated['receiver_id'];
+        $emoji = $validated['emoji'] ?? '❤️';
+
+        if (!$emoji) {
+            return response()->json(['message' => 'Reaction removed']);
+        }
+
+        // Send in-app notification to receiver
+        \App\Models\Notification::create([
+            'user_id'      => $receiverId,
+            'from_user_id' => $senderId,
+            'type'         => 'message_reaction',
+            'message'      => "{$sender->name} reacted {$emoji} to your message",
+            'is_read'      => false,
+        ]);
+
+        return response()->json([
+            'message' => 'Reaction recorded and notification sent',
+        ]);
+    }
+
     public function getBlockedUsers(Request $request)
     {
         $userId = $request->user()->id;

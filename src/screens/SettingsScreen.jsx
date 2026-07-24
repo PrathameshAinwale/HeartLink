@@ -211,8 +211,18 @@ export default function SettingsScreen() {
         {/* ─── 3. Subscription Status Section ────────────────────────────── */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeaderRow}>
-            <Ionicons name="diamond-outline" size={18} color="#FF007F" style={{ marginRight: 8 }} />
-            <Text style={styles.sectionTitle}>Subscription & Status</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Ionicons name="diamond-outline" size={18} color="#FF007F" style={{ marginRight: 8 }} />
+              <Text style={styles.sectionTitle}>Subscription & Status</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.allPlansBtn}
+              onPress={() => navigation.navigate('Plans')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.allPlansBtnTxt}>All Plans</Text>
+              <Ionicons name="chevron-forward" size={13} color="#FF007F" style={{ marginLeft: 2 }} />
+            </TouchableOpacity>
           </View>
 
           {activePlanName ? (
@@ -468,7 +478,7 @@ export default function SettingsScreen() {
           >
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <Ionicons name="ban-outline" size={18} color="#FF007F" style={{ marginRight: 10 }} />
-              <Text style={styles.menuRowTxt}>Blocked Profiles Screen</Text>
+              <Text style={styles.menuRowTxt}>Blocked Profiles</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={theme.textFaint} />
           </TouchableOpacity>
@@ -700,12 +710,26 @@ const getStyles = (theme) => StyleSheet.create({
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 12,
   },
   sectionTitle: {
     fontSize: 15,
     fontWeight: '800',
     color: theme.textPrimary,
+  },
+  allPlansBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 0, 127, 0.08)',
+  },
+  allPlansBtnTxt: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FF007F',
   },
 
   row: {

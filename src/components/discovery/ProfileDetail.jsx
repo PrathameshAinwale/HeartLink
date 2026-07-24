@@ -267,7 +267,7 @@ export default function ProfileDetail({ visible, profile, onClose, onLike, onPas
                     >
                       <LinearGradient colors={['#FF007F', '#B5179E']} style={styles.sheetBtnLikeGrad}>
                         <Ionicons name={isMatch ? "chatbubble-ellipses-outline" : "heart"} size={20} color="#fff" />
-                        <Text style={styles.sheetBtnLikeTxt}>{isMatch ? "Message" : "Like"}</Text>
+                        <Text style={styles.sheetBtnLikeTxt}>{isMatch ? "Chat" : "Like"}</Text>
                       </LinearGradient>
                     </TouchableOpacity>
                   ) : null}

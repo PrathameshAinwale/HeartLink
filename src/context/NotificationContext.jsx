@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { Platform } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
-import { apiGetConversations, apiGetRequests } from '../services/api';
+import { apiGetConversations, apiGetRequests, apiGetNotifications } from '../services/api';
 import { formatImageUrl } from '../utils/helpers';
 
 const NotificationContext = createContext({
@@ -20,6 +20,7 @@ export const NotificationProvider = ({ children }) => {
   // Tracking previous counts to detect incoming notifications
   const lastUnreadCountRef = useRef({});
   const lastPendingRequestsCountRef = useRef(0);
+  const lastUnreadNotifCountRef = useRef(0);
   const isInitialFetchRef = useRef(true);
   const isFetchingRef = useRef(false);
 
@@ -32,15 +33,16 @@ export const NotificationProvider = ({ children }) => {
     setBannerVisible(false);
   }, []);
 
-  // Poll for new messages and new match requests
+  // Poll for new messages, match requests, and date proposals
   const checkNotifications = useCallback(async () => {
     if (!isAuthenticated || !user || isFetchingRef.current) return;
     isFetchingRef.current = true;
 
     try {
-      const [chatRes, reqRes] = await Promise.all([
+      const [chatRes, reqRes, notifRes] = await Promise.all([
         apiGetConversations().catch(() => null),
         apiGetRequests().catch(() => null),
+        apiGetNotifications().catch(() => null),
       ]);
 
       // 1. Check for NEW Chat Messages
@@ -65,7 +67,7 @@ export const NotificationProvider = ({ children }) => {
         });
       }
 
-      // 2. Check for NEW Match Requests
+      // 2. Check for NEW Match Requests & Date Proposals
       if (reqRes?.requests && Array.isArray(reqRes.requests)) {
         const pendingList = reqRes.requests.filter(
           (r) => (r.request_status || r.status || 'pending') === 'pending'
@@ -74,16 +76,52 @@ export const NotificationProvider = ({ children }) => {
         const prevPendingCount = lastPendingRequestsCountRef.current;
 
         if (!isInitialFetchRef.current && currentPendingCount > prevPendingCount) {
-          // New match request received!
           const latestReq = pendingList[0];
+          const isProposal = latestReq?.type === 'date_proposal' || latestReq?.request_type === 'date_proposal';
+
           triggerNotification({
-            type: 'request',
-            title: 'New Match Request! ⚡',
-            message: latestReq?.name ? `${latestReq.name} wants to connect with you` : 'Someone sent you a cosmic match request!',
+            type: isProposal ? 'date_proposal' : 'request',
+            title: isProposal ? 'New Date Proposal! 🥂' : 'New Match Request! ⚡',
+            message: latestReq?.name
+              ? (isProposal
+                  ? `${latestReq.name} invited you on a date at ${latestReq.restaurant?.name || 'a date spot'}!`
+                  : `${latestReq.name} wants to connect with you`)
+              : 'Someone sent you a request!',
             avatar: latestReq?.avatar ? formatImageUrl(latestReq.avatar) : null,
+            userId: latestReq?.user_id || latestReq?.user?.id,
+            user: latestReq?.user,
           });
         }
         lastPendingRequestsCountRef.current = currentPendingCount;
+      }
+
+      // 3. Check for Notifications (date responses, acceptances, etc.)
+      if (notifRes?.notifications && Array.isArray(notifRes.notifications)) {
+        const unreadNotifs = notifRes.notifications.filter((n) => !n.is_read);
+        const currentUnreadNotifCount = unreadNotifs.length;
+        const prevUnreadNotifCount = lastUnreadNotifCountRef.current || 0;
+
+        if (!isInitialFetchRef.current && currentUnreadNotifCount > prevUnreadNotifCount) {
+          const latestNotif = unreadNotifs[0];
+          if (latestNotif) {
+            const notifType = latestNotif.type || 'notification';
+            let title = 'HeartLink Alert 🥂';
+            if (notifType === 'request_accepted') title = 'Request Accepted! 💕';
+            else if (notifType === 'message_reaction') title = 'New Reaction! ❤️';
+            else if (notifType === 'date_proposal') title = 'New Date Proposal! 🥂';
+            else if (notifType.includes('date')) title = 'Date Update 🥂';
+
+            triggerNotification({
+              type: notifType,
+              title,
+              message: latestNotif.message || 'You have a new update!',
+              avatar: latestNotif.from_user?.avatar ? formatImageUrl(latestNotif.from_user.avatar) : null,
+              userId: latestNotif.from_user?.id,
+              user: latestNotif.from_user,
+            });
+          }
+        }
+        lastUnreadNotifCountRef.current = currentUnreadNotifCount;
       }
 
       if (isInitialFetchRef.current) {

@@ -50,6 +50,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/chats',               [ChatController::class, 'conversations']);
         Route::get('/chats/{otherUserId}', [ChatController::class, 'getMessages']);
         Route::post('/chats/send',         [ChatController::class, 'sendMessage']);
+        Route::post('/chats/react',        [ChatController::class, 'reactMessage']);
         Route::get('/users/blocked',       [ChatController::class, 'getBlockedUsers']);
         Route::post('/users/block',        [ChatController::class, 'blockUser']);
         Route::post('/users/unblock',      [ChatController::class, 'unblockUser']);

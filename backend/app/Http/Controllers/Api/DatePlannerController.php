@@ -23,19 +23,39 @@ class DatePlannerController extends Controller
         $validated = $request->validate([
             'partner_id'    => 'required|exists:users,id',
             'restaurant_id' => 'required|exists:restaurants,id',
-            'booking_date'  => 'required|date',
+            'booking_date'  => 'required',
             'booking_time'  => 'required|string',
         ]);
 
         $proposerId = $request->user()->id;
 
+        $rawDate = $validated['booking_date'];
+        try {
+            $formattedDate = \Carbon\Carbon::parse($rawDate)->format('Y-m-d');
+        } catch (\Throwable $e) {
+            $formattedDate = date('Y-m-d', strtotime($rawDate)) ?: now()->format('Y-m-d');
+        }
+
         $booking = DateBooking::create([
             'proposer_id'   => $proposerId,
             'partner_id'    => $validated['partner_id'],
             'restaurant_id' => $validated['restaurant_id'],
-            'booking_date'  => $validated['booking_date'],
+            'booking_date'  => $formattedDate,
             'booking_time'  => $validated['booking_time'],
             'status'        => 'pending',
+        ]);
+
+        // Send in-app notification to receiver (partner)
+        $proposer = $request->user();
+        $restaurant = Restaurant::find($validated['restaurant_id']);
+        $restaurantName = $restaurant ? $restaurant->name : 'a date spot';
+
+        \App\Models\Notification::create([
+            'user_id'      => $validated['partner_id'],
+            'from_user_id' => $proposerId,
+            'type'         => 'date_proposal',
+            'message'      => "{$proposer->name} invited you on a date at {$restaurantName}!",
+            'is_read'      => false,
         ]);
 
         return response()->json([
@@ -62,6 +82,20 @@ class DatePlannerController extends Controller
 
         $newStatus = in_array($validated['status'], ['rejected', 'declined']) ? 'declined' : 'accepted';
         $booking->update(['status' => $newStatus]);
+
+        // Send in-app notification to proposer
+        $partner = $request->user();
+        $msg = $newStatus === 'accepted'
+            ? "{$partner->name} accepted your date proposal! 🥂"
+            : "{$partner->name} declined your date proposal.";
+
+        \App\Models\Notification::create([
+            'user_id'      => $booking->proposer_id,
+            'from_user_id' => $userId,
+            'type'         => 'date_response',
+            'message'      => $msg,
+            'is_read'      => false,
+        ]);
 
         return response()->json([
             'message' => "Date proposal {$newStatus} successfully! 🥂",

@@ -13,6 +13,7 @@ class Swipe extends Model
         'swiper_id',
         'swiped_user_id',
         'type',
+        'is_declined_by_receiver',
     ];
 
     public function swiper()

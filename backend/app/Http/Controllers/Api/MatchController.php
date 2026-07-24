@@ -59,6 +59,13 @@ class MatchController extends Controller
             $q->where('user_1_id', $otherId)->where('user_2_id', $userId);
         })->delete();
 
+        // Also delete any swipe records between the two users so requests can be sent again
+        Swipe::where(function ($q) use ($userId, $otherId) {
+            $q->where('swiper_id', $userId)->where('swiped_user_id', $otherId);
+        })->orWhere(function ($q) use ($userId, $otherId) {
+            $q->where('swiper_id', $otherId)->where('swiped_user_id', $userId);
+        })->delete();
+
         return response()->json([
             'message' => 'Unmatched successfully',
         ]);
@@ -171,6 +178,5 @@ class MatchController extends Controller
         return response()->json([
             'requests' => $merged,
         ]);
-    }
     }
 }

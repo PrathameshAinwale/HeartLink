@@ -19,6 +19,7 @@ class RequestController extends Controller
      */
     public function accept(Request $request, $fromUserId)
     {
+        $fromUserId  = (int) preg_replace('/[^0-9]/', '', (string) $fromUserId);
         $currentUser = $request->user();
         $currentId   = $currentUser->id;
 
@@ -70,6 +71,7 @@ class RequestController extends Controller
      */
     public function decline(Request $request, $fromUserId)
     {
+        $fromUserId  = (int) preg_replace('/[^0-9]/', '', (string) $fromUserId);
         $currentUser = $request->user();
         $currentId   = $currentUser->id;
 

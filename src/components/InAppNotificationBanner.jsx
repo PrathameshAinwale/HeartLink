@@ -73,9 +73,21 @@ export default function InAppNotificationBanner({ visible, data, onDismiss }) {
     dismissBanner();
     if (data?.onPress) {
       data.onPress(navigation);
-    } else if (data?.type === 'chat' && data?.userId) {
-      navigation.navigate('ChatDetail', { userId: data.userId, user: data.user });
-    } else if (data?.type === 'request') {
+      return;
+    }
+
+    const type = data?.type || '';
+    const userId = data?.userId || data?.from_user_id || data?.from_user?.id || data?.fromUser?.id;
+
+    if ((type === 'chat' || type === 'message' || type === 'message_reaction') && userId) {
+      navigation.navigate('ChatDetail', { userId, user: data?.user || data?.fromUser });
+    } else if (type === 'request_accepted' && userId) {
+      navigation.navigate('ChatDetail', { userId, user: data?.user || data?.fromUser });
+    } else if (['request', 'date_proposal', 'like', 'super_like', 'date_accepted', 'date_declined', 'date_response', 'request_declined'].includes(type)) {
+      navigation.navigate('Requests');
+    } else if (userId && (type.includes('chat') || type.includes('message') || type.includes('reaction'))) {
+      navigation.navigate('ChatDetail', { userId, user: data?.user || data?.fromUser });
+    } else {
       navigation.navigate('Requests');
     }
   };

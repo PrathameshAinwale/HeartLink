@@ -165,7 +165,7 @@ class DiscoverController extends Controller
         // Record or update swipe
         $swipe = Swipe::updateOrCreate(
             ['swiper_id' => $swiperId, 'swiped_user_id' => $targetId],
-            ['type' => $type]
+            ['type' => $type, 'is_declined_by_receiver' => false]
         );
 
         $isMatch = false;

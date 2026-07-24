@@ -10,9 +10,9 @@ return new class extends Migration
     {
         Schema::table('users', function (Blueprint $table) {
             $table->string('zodiac_sign')->nullable()->after('relationship_type');
-            $table->enum('drinking', ['Never', 'Socially', 'Regularly', 'Prefer not to say'])->nullable()->after('zodiac_sign');
-            $table->enum('smoking', ['Never', 'Occasionally', 'Regularly', 'Prefer not to say'])->nullable()->after('drinking');
-            $table->enum('exercise', ['Never', 'Sometimes', 'Often', 'Daily'])->nullable()->after('smoking');
+            $table->string('drinking')->nullable()->after('zodiac_sign');
+            $table->string('smoking')->nullable()->after('drinking');
+            $table->string('exercise')->nullable()->after('smoking');
         });
     }
 
